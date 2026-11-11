@@ -151,3 +151,10 @@ kbd { font: 600 11px var(--sans); opacity: .6; margin-left: 8px; }
 .row-quick .icon-btn:hover { color: var(--ink); }
 @media (min-width: 768px) { .row:hover .row-quick, .row:focus-within .row-quick { display: flex; } }
 .selbar .btn-secondary:disabled { opacity: .45; }
+
+/* Phone: swipe a row left for Archive · Delete */
+.row-body { transition: none; }
+.row-swipe { display: flex; gap: 6px; align-self: center; animation: fade .15s ease; }
+.sw-btn { border: 0; border-radius: var(--r-pill); background: var(--soft); color: var(--ink); font-weight: 600; font-size: 13px; padding: 8px 14px; min-height: 36px; }
+.sw-btn.danger { background: var(--danger); color: var(--paper); }
+.row.swiped .row-text { -webkit-line-clamp: 1; }

@@ -23,6 +23,7 @@ const S = {
   q: '',
   archTab: 'curiosity' as ThoughtType,
   reveal: '', // archives row showing Restore · Delete
+  swiped: '', // phone: list row swiped left, showing Archive · Delete
   selecting: false,
   picked: new Set<string>(),
   greet: {} as Partial<Record<ThoughtType, string>>,
@@ -154,8 +155,9 @@ async function renderList(view: HTMLElement): Promise<void> {
     const c = counts.get(t.id);
     const meta = [t.categoryId && catName.get(t.categoryId) ? h(catName.get(t.categoryId)!) : '', c?.total ? `${c.total} step${c.total > 1 ? 's' : ''}` : '', c?.inNudge ? `<span class="g">${c.inNudge} in Nudge</span>` : '', t.note && !c?.total ? 'has a note' : ''].filter(Boolean).join(' · ');
     const picked = S.picked.has(t.id);
-    const quick = S.selecting ? '' : `<span class="row-quick"><button class="icon-btn sm" data-qarch="${t.id}" aria-label="Archive" title="Archive">${ICON.archive}</button><button class="icon-btn sm" data-qdel="${t.id}" aria-label="Delete" title="Delete">${ICON.trash}</button></span>`;
-    return `<div class="row${S.selecting ? ' selecting' : ''}${wide() && S.id === t.id ? ' on' : ''}" data-open="${t.id}" role="button" tabindex="0" ${S.selecting ? `aria-pressed="${picked}"` : ''}>${S.selecting ? `<span class="check${picked ? ' on' : ''}" aria-hidden="true">${picked ? '✓' : ''}</span>` : ''}<span class="row-body"><span class="row-text">${h(t.text)}</span>${meta ? `<span class="meta">${meta}</span>` : ''}</span>${quick}</div>`;
+    const swiped = S.swiped === t.id && !S.selecting;
+    const quick = S.selecting ? '' : swiped ? `<span class="row-swipe"><button class="sw-btn" data-qarch="${t.id}">Archive</button><button class="sw-btn danger" data-qdel="${t.id}">Delete</button></span>` : `<span class="row-quick"><button class="icon-btn sm" data-qarch="${t.id}" aria-label="Archive" title="Archive">${ICON.archive}</button><button class="icon-btn sm" data-qdel="${t.id}" aria-label="Delete" title="Delete">${ICON.trash}</button></span>`;
+    return `<div class="row${swiped ? ' swiped' : ''}${S.selecting ? ' selecting' : ''}${wide() && S.id === t.id ? ' on' : ''}" data-open="${t.id}" role="button" tabindex="0" ${S.selecting ? `aria-pressed="${picked}"` : ''}>${S.selecting ? `<span class="check${picked ? ' on' : ''}" aria-hidden="true">${picked ? '✓' : ''}</span>` : ''}<span class="row-body"><span class="row-text">${h(t.text)}</span>${meta ? `<span class="meta">${meta}</span>` : ''}</span>${quick}</div>`;
   };
   let body: string;
   if (!items.length) {
@@ -175,15 +177,18 @@ async function renderList(view: HTMLElement): Promise<void> {
     <div class="list-tools"><button class="link muted" data-sort>${sortLabel} ▾</button>${items.length && !S.selecting ? '<button class="link muted push" data-select>Select</button>' : ''}${S.cat ? `<span class="chip on">${h(catName.get(S.cat) ?? '')}<button class="chip-x" data-clearcat aria-label="Clear category">${ICON.x}</button></span>` : ''}</div>
     <div class="list">${body}</div>
     ${S.selecting ? `<div class="selbar"><button class="btn-secondary" data-selcancel>Cancel</button><button class="btn-secondary" data-selall>${S.picked.size === items.length ? 'Clear' : 'Select all'}</button><button class="btn-secondary" data-selarchive ${S.picked.size ? '' : 'disabled'}>Archive${S.picked.size ? ` (${S.picked.size})` : ''}</button><button class="btn danger" data-seldel ${S.picked.size ? '' : 'disabled'}>Delete${S.picked.size ? ` (${S.picked.size})` : ''}</button></div>` : ''}`;
-  if (!S.selecting) longPress(view, (id) => { S.selecting = true; S.picked = new Set([id]); void render(); });
+  if (!S.selecting) longPress(view, (id) => { S.selecting = true; S.swiped = ''; S.picked = new Set([id]); void render(); });
+  if (!wide() && !S.selecting) swipeRows(view);
 
   view.onclick = async (e) => {
     const t = e.target as HTMLElement;
     if (pressed) { pressed = false; return; } // the click right after a long-press
+    if (swipedNow) { swipedNow = false; return; }
+    if (S.swiped && !t.closest('[data-qarch],[data-qdel]')) { S.swiped = ''; return void render(); } // a tap closes an open swipe
     const qa = t.closest<HTMLElement>('[data-qarch]');
-    if (qa) { const id = qa.dataset.qarch!; await archive([id]); if (S.id === id) S.id = ''; void render(); return toast('Archived', async () => { await unarchive([id]); void render(); }); }
+    if (qa) { const id = qa.dataset.qarch!; S.swiped = ''; await archive([id]); if (S.id === id) S.id = ''; void render(); return toast('Archived', async () => { await unarchive([id]); void render(); }); }
     const qd = t.closest<HTMLElement>('[data-qdel]');
-    if (qd) { const id = qd.dataset.qdel!; await softDelete([id]); if (S.id === id) S.id = ''; void render(); return toast('Thought deleted', async () => { await restore([id]); void render(); }); }
+    if (qd) { const id = qd.dataset.qdel!; S.swiped = ''; await softDelete([id]); if (S.id === id) S.id = ''; void render(); return toast('Thought deleted', async () => { await restore([id]); void render(); }); }
     if (t.closest('[data-select]')) { S.selecting = true; S.picked.clear(); return void render(); }
     if (t.closest('[data-seldel]')) {
       const ids = [...S.picked]; await softDelete(ids); if (ids.includes(S.id)) S.id = ''; S.selecting = false; S.picked.clear(); void render();
@@ -208,6 +213,34 @@ async function renderList(view: HTMLElement): Promise<void> {
   };
 }
 const newest = (a: Thought, b: Thought) => b.createdAt.localeCompare(a.createdAt);
+
+/** Phone: swipe a row left to show Archive and Delete; swipe right or tap to close. */
+let swipedNow = false;
+function swipeRows(root: HTMLElement): void {
+  let row: HTMLElement | null = null, body: HTMLElement | null = null, x0 = 0, y0 = 0, dx = 0, drag = false;
+  root.ontouchstart = (e) => {
+    row = (e.target as HTMLElement).closest<HTMLElement>('[data-open]');
+    if (!row || (e.target as HTMLElement).closest('button')) { row = null; return; }
+    body = row.querySelector<HTMLElement>('.row-body'); x0 = e.touches[0].clientX; y0 = e.touches[0].clientY; dx = 0; drag = false;
+  };
+  root.ontouchmove = (e) => {
+    if (!row || !body) return;
+    dx = e.touches[0].clientX - x0; const dy = e.touches[0].clientY - y0;
+    if (!drag) { if (Math.abs(dy) > 10 && Math.abs(dy) > Math.abs(dx)) { row = null; return; } if (Math.abs(dx) > 10) drag = true; }
+    if (drag) body.style.transform = `translateX(${Math.max(-150, Math.min(0, dx))}px)`;
+  };
+  root.ontouchend = () => {
+    if (!row || !body) return;
+    const id = row.dataset.open!;
+    if (drag) {
+      swipedNow = true; setTimeout(() => { swipedNow = false; }, 350);
+      body.style.transition = 'transform .18s ease'; body.style.transform = '';
+      if (dx < -60) S.swiped = id; else if (dx > 40 && S.swiped === id) S.swiped = '';
+      void render();
+    }
+    row = null;
+  };
+}
 
 /** Hold a row for half a second to start selecting with it picked. The click right after is swallowed. */
 let pressed = false;
