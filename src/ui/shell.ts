@@ -79,7 +79,7 @@ export function render(): Promise<void> {
 async function draw(): Promise<void> {
   const view = document.getElementById('view')!;
   const bar = document.getElementById('bar')!;
-  bar.hidden = S.view !== 'list';
+  bar.hidden = S.view !== 'list' || S.selecting;
   bar.innerHTML = `
     <button class="tab-btn" data-tab="curiosity" ${S.tab === 'curiosity' ? 'aria-current="page"' : ''}>Curiosities</button>
     <button class="fab" data-plus aria-label="Catch a thought">${ICON.plus}</button>
@@ -180,9 +180,9 @@ async function renderList(view: HTMLElement): Promise<void> {
     <header class="topbar"><h1 class="greet serif">${h(S.greet[S.tab]!)}</h1>
       <div class="top-icons"><button class="icon-btn" data-search aria-label="Search">${ICON.search}</button><button class="icon-btn" data-menu aria-label="Menu">${ICON.menu}</button></div></header>
     ${update}${card}
-    <div class="list-tools"><button class="link muted" data-sort>${sortLabel} ▾</button>${items.length && !S.selecting ? '<button class="link muted push" data-select>Select</button>' : ''}${S.cat ? `<span class="chip on">${h(catName.get(S.cat) ?? '')}<button class="chip-x" data-clearcat aria-label="Clear category">${ICON.x}</button></span>` : ''}</div>
+    <div class="list-tools">${S.sort !== 'newest' ? `<span class="muted small">${sortLabel}</span>` : ''}${S.cat ? `<span class="chip on">${h(catName.get(S.cat) ?? '')}<button class="chip-x" data-clearcat aria-label="Clear category">${ICON.x}</button></span>` : ''}<span class="push"></span>${items.length && !S.selecting ? '<button class="link muted" data-select>Select</button>' : ''}<button class="icon-btn${S.cat || S.sort !== 'newest' ? ' active' : ''}" data-sort aria-label="Sort and filter" title="Sort and filter">${ICON.filter}</button></div>
     <div class="list${rise ? ' rise' : ''}">${body}</div>
-    ${S.selecting ? `<div class="selbar"><button class="btn-secondary" data-selcancel>Cancel</button><button class="btn-secondary" data-selall>${S.picked.size === items.length ? 'Clear' : 'Select all'}</button><button class="btn-secondary" data-selarchive ${S.picked.size ? '' : 'disabled'}>Archive${S.picked.size ? ` (${S.picked.size})` : ''}</button><button class="btn danger" data-seldel ${S.picked.size ? '' : 'disabled'}>Delete${S.picked.size ? ` (${S.picked.size})` : ''}</button></div>` : ''}`;
+    ${S.selecting ? selectBar(S.picked.size, S.picked.size === items.length, [['selarchive', 'archive', 'Archive'], ['seldel', 'trash', 'Delete']]) : ''}`;
   if (!S.selecting) longPress(view, (id) => { S.selecting = true; S.swiped = ''; S.picked = new Set([id]); void render(); });
   if (!wide() && !S.selecting) swipeRows(view);
 
@@ -231,6 +231,12 @@ async function renderList(view: HTMLElement): Promise<void> {
   };
 }
 const newest = (a: Thought, b: Thought) => b.createdAt.localeCompare(a.createdAt);
+
+/** Like Nudge!'s select bar: a dark strip over the bottom bar, the count, then icon-only actions. */
+function selectBar(n: number, allPicked: boolean, acts: [string, keyof typeof ICON, string][]): string {
+  const b = (data: string, icon: keyof typeof ICON, label: string, off = false) => `<button type="button" data-${data} aria-label="${label}" title="${label}" ${off ? 'disabled' : ''}>${ICON[icon]}</button>`;
+  return `<div class="selectbar" role="toolbar" aria-label="Selected thoughts"><div class="in"><span class="n">${n} selected</span>${b('selall', 'all', allPicked ? 'Clear selection' : 'Select all')}${acts.map(([d, i, l]) => b(d, i, l, !n)).join('')}${b('selcancel', 'x', 'Done selecting')}</div></div>`;
+}
 
 /** Phone: swipe a row left to show Archive and Delete; swipe right or tap to close. */
 let swipedNow = false;
@@ -350,7 +356,7 @@ async function renderArchives(view: HTMLElement): Promise<void> {
     <div class="list-tools"><span class="hint" style="margin:0">${items.length && !S.selecting ? 'Tap a thought for Restore or Delete.' : ''}</span>${items.length && !S.selecting ? '<button class="link muted push" data-select>Select</button>' : ''}</div>
     <div class="list">${items.length ? items.map((t) => `<div class="row arch${S.reveal === t.id ? ' revealed' : ''}" data-reveal="${t.id}" role="button" tabindex="0" ${S.selecting ? `aria-pressed="${S.picked.has(t.id)}"` : ''}>${S.selecting ? `<span class="check${S.picked.has(t.id) ? ' on' : ''}" aria-hidden="true">${S.picked.has(t.id) ? '✓' : ''}</span>` : ''}<span class="row-body"><span class="row-text">${h(t.text)}</span></span>${S.reveal === t.id ? `<span class="row-acts"><button class="link" data-restore="${t.id}">Restore</button><button class="link muted" data-del="${t.id}">Delete</button><button class="link muted" data-openarch="${t.id}">Open</button></span>` : ''}</div>`).join('') : '<p class="empty">Nothing archived here.</p>'}</div>
     ${items.length > 1 && !S.selecting ? `<button class="link muted" style="margin-top:20px" data-delall>Delete all archived ${plural(S.archTab).toLowerCase()}</button>` : ''}
-    ${S.selecting ? `<div class="selbar"><button class="btn-secondary" data-selcancel>Cancel</button><button class="btn-secondary" data-selall>${S.picked.size === items.length ? 'Clear' : 'Select all'}</button><button class="btn-secondary" data-selrestore ${S.picked.size ? '' : 'disabled'}>Restore${S.picked.size ? ` (${S.picked.size})` : ''}</button><button class="btn danger" data-seldel ${S.picked.size ? '' : 'disabled'}>Delete${S.picked.size ? ` (${S.picked.size})` : ''}</button></div>` : ''}`;
+    ${S.selecting ? selectBar(S.picked.size, S.picked.size === items.length, [['selrestore', 'restore', 'Restore'], ['seldel', 'trash', 'Delete']]) : ''}`;
   view.onclick = async (e) => {
     const t = e.target as HTMLElement;
     if (t.closest('[data-back]')) return back();

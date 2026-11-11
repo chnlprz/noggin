@@ -174,3 +174,14 @@ kbd { font: 600 11px var(--sans); opacity: .6; margin-left: 8px; }
 .list.rise > *:nth-child(2) { animation-delay: 60ms; } .list.rise > *:nth-child(3) { animation-delay: 120ms; }
 .list.rise > *:nth-child(4) { animation-delay: 180ms; } .list.rise > *:nth-child(n+5) { animation-delay: 240ms; }
 @keyframes fadeup { from { opacity: 0; transform: translateY(8px); } }
+
+/* Select bar (as Nudge!): dark strip at the bottom, icon-only actions */
+.selectbar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 7; background: var(--ink); color: var(--paper); padding: 8px max(12px, env(safe-area-inset-right)) max(10px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left)); animation: up .18s var(--ease-out); }
+.selectbar .in { max-width: 440px; margin: 0 auto; display: flex; align-items: center; gap: 2px; }
+.selectbar .n { flex: 1; font-weight: 600; font-size: calc(14px * var(--text-scale)); padding-left: 6px; }
+.selectbar button { width: 48px; height: 48px; border: 0; background: transparent; color: var(--paper); display: grid; place-items: center; border-radius: var(--r-pill); }
+.selectbar button:disabled { opacity: .35; }
+.selectbar .ic { width: 22px; height: 22px; }
+.icon-btn.active { color: var(--accent-text); }
+.list-tools .icon-btn { margin-right: -10px; }
+@media (min-width: 768px) { .selectbar { left: 212px; } }
