@@ -1,6 +1,6 @@
 *, *::before, *::after { box-sizing: border-box; min-width: 0; }
 html, body { margin: 0; padding: 0; }
-html { -webkit-text-size-adjust: 100%; -webkit-tap-highlight-color: transparent; }
+html { background: var(--paper); -webkit-text-size-adjust: 100%; -webkit-tap-highlight-color: transparent; }
 body {
   background: var(--paper); color: var(--ink);
   font: calc(15px * var(--text-scale)) / 1.45 var(--sans);

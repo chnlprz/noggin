@@ -5,7 +5,7 @@ export default defineConfig({
   plugins: [
     VitePWA({
       registerType: 'prompt',
-      includeAssets: ['icons/*.svg', 'icons/*.png', 'fonts/BodoniModa-opsz.woff2'],
+      includeAssets: ['favicon.ico', 'icons/*.svg', 'icons/*.png', 'fonts/BodoniModa-opsz.woff2'],
       manifest: {
         name: 'Noggin?',
         short_name: 'Noggin?',
