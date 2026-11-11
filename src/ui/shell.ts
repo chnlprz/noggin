@@ -1,0 +1,273 @@
+// App shell (Bible › Screens and navigation): greeting top bar, Curiosities · + · Wonderings, lists, search, archives, menu.
+import { db, getSettings, updateSettings } from '../db/db';
+import type { Category, Mode, Thought, ThoughtType } from '../db/types';
+import { applyLook } from '../lib/look';
+import { applyUpdate } from '../lib/sw';
+import { pickGreeting } from '../lib/util';
+import { archive, categories, listThoughts, restore, search, softDelete, stepCounts, unarchive } from '../logic/thoughts';
+import { openCapture } from './capture';
+import { renderDetail } from './detail';
+import { h, ICON, openSheet, toast } from './kit';
+
+type View = 'list' | 'detail' | 'search' | 'archives';
+type Sort = 'newest' | 'oldest' | 'category' | 'revisited';
+
+const S = {
+  tab: 'curiosity' as ThoughtType,
+  view: 'list' as View,
+  id: '',
+  sort: 'newest' as Sort,
+  cat: '' as string, // filter by category id
+  q: '',
+  archTab: 'curiosity' as ThoughtType,
+  reveal: '', // archives row showing Restore · Delete
+  selecting: false,
+  picked: new Set<string>(),
+  greet: {} as Partial<Record<ThoughtType, string>>,
+};
+
+let app: HTMLElement;
+const plural = (t: ThoughtType) => (t === 'curiosity' ? 'Curiosities' : 'Wonderings');
+
+export function startShell(root: HTMLElement): void {
+  app = root;
+  app.innerHTML = `<div class="shell"><div id="view"></div></div><nav class="bottombar" id="bar" aria-label="Lists"></nav>`;
+  window.addEventListener('popstate', () => { S.view = (history.state?.view as View) ?? 'list'; S.id = history.state?.id ?? ''; void render(); });
+  window.addEventListener('noggin:update-ready', () => void render());
+  document.addEventListener('keydown', (e) => {
+    const typing = /INPUT|TEXTAREA/.test((e.target as HTMLElement).tagName);
+    if (typing || document.querySelector('.sheet-back')) return;
+    if (e.key === 'n' || e.key === 'N') { e.preventDefault(); plus(); }
+    if (e.key === '/') { e.preventDefault(); go('search'); }
+  });
+  enableSwipeBack();
+  void render();
+}
+
+function go(view: View, id = ''): void {
+  S.view = view; S.id = id; S.selecting = false; S.picked.clear();
+  if (view === 'list') history.replaceState(null, '');
+  else history.pushState({ view, id }, '');
+  window.scrollTo(0, 0);
+  void render();
+}
+const back = () => (history.state?.view ? history.back() : go('list'));
+const plus = () => void openCapture(S.view === 'list' ? S.tab : S.tab, (type) => { S.tab = type; if (S.view === 'list') void render(); });
+
+export async function render(): Promise<void> {
+  const view = document.getElementById('view')!;
+  const bar = document.getElementById('bar')!;
+  bar.hidden = S.view !== 'list';
+  bar.innerHTML = `
+    <button class="tab-btn" data-tab="curiosity" ${S.tab === 'curiosity' ? 'aria-current="page"' : ''}>Curiosities</button>
+    <button class="fab" data-plus aria-label="Catch a thought">${ICON.plus}</button>
+    <button class="tab-btn" data-tab="wondering" ${S.tab === 'wondering' ? 'aria-current="page"' : ''}>Wonderings</button>`;
+  bar.onclick = (e) => {
+    const t = e.target as HTMLElement;
+    if (t.closest('[data-plus]')) return plus();
+    const tb = t.closest<HTMLElement>('[data-tab]');
+    if (tb) { S.tab = tb.dataset.tab as ThoughtType; S.cat = ''; S.selecting = false; S.picked.clear(); window.scrollTo(0, 0); void render(); }
+  };
+  if (S.view === 'detail') return renderDetail(view, S.id, { back, refresh: () => void render() });
+  if (S.view === 'search') return renderSearch(view);
+  if (S.view === 'archives') return renderArchives(view);
+  return renderList(view);
+}
+
+// ── Lists ──
+async function renderList(view: HTMLElement): Promise<void> {
+  const s = await getSettings();
+  const meta = await db.meta.get('meta');
+  if (!S.greet[S.tab]) {
+    S.greet[S.tab] = pickGreeting(s.name, S.tab, meta?.lastGreeting);
+    await db.meta.update('meta', { lastGreeting: S.greet[S.tab] });
+  }
+  const [all, cats, counts] = await Promise.all([listThoughts({ type: S.tab, archived: false }), categories(), stepCounts()]);
+  const items = S.cat ? all.filter((t) => t.categoryId === S.cat) : all;
+  const catName = new Map(cats.map((c) => [c.id, c.name]));
+  const sortLabel = { newest: 'Newest', oldest: 'Oldest', category: 'By category', revisited: 'Most revisited' }[S.sort];
+  const update = sessionStorage.getItem('noggin-update-ready')
+    ? `<div class="notice"><span>A new Noggin? is ready.</span><button class="link" data-reload>Reload</button></div>` : '';
+
+  const rowHTML = (t: Thought) => {
+    const c = counts.get(t.id);
+    const meta = [t.categoryId && catName.get(t.categoryId) ? h(catName.get(t.categoryId)!) : '', c?.total ? `${c.total} step${c.total > 1 ? 's' : ''}` : '', c?.inNudge ? `<span class="g">${c.inNudge} in Nudge</span>` : '', t.note && !c?.total ? 'has a note' : ''].filter(Boolean).join(' · ');
+    const picked = S.picked.has(t.id);
+    return `<button class="row${S.selecting ? ' selecting' : ''}" data-open="${t.id}" ${S.selecting ? `aria-pressed="${picked}"` : ''}>${S.selecting ? `<span class="check${picked ? ' on' : ''}" aria-hidden="true">${picked ? '✓' : ''}</span>` : ''}<span class="row-body"><span class="row-text">${h(t.text)}</span>${meta ? `<span class="meta">${meta}</span>` : ''}</span></button>`;
+  };
+  let body: string;
+  if (!items.length) {
+    body = `<p class="empty">${S.cat ? 'Nothing in this category yet.' : S.tab === 'curiosity' ? 'No ideas yet. Tap + when one shows up.' : 'No wonderings yet. Tap + to save a question.'}</p>`;
+  } else if (S.sort === 'category') {
+    const groups = [...cats.map((c) => [c.name, items.filter((t) => t.categoryId === c.id)] as const), ['No category', items.filter((t) => !t.categoryId || !catName.has(t.categoryId))] as const].filter(([, l]) => l.length);
+    body = groups.map(([n, l]) => `<p class="group-h">${h(n)}</p>${[...l].sort(newest).map(rowHTML).join('')}`).join('');
+  } else {
+    const sorted = [...items].sort(S.sort === 'oldest' ? (a, b) => a.createdAt.localeCompare(b.createdAt) : S.sort === 'revisited' ? (a, b) => b.opens - a.opens || newest(a, b) : newest);
+    body = sorted.map(rowHTML).join('');
+  }
+
+  view.innerHTML = `
+    <header class="topbar"><h1 class="greet serif">${h(S.greet[S.tab]!)}</h1>
+      <div class="top-icons"><button class="icon-btn" data-search aria-label="Search">${ICON.search}</button><button class="icon-btn" data-menu aria-label="Menu">${ICON.menu}</button></div></header>
+    ${update}
+    <div class="list-tools"><button class="link muted" data-sort>${sortLabel} ▾</button>${S.cat ? `<span class="chip on">${h(catName.get(S.cat) ?? '')}<button class="chip-x" data-clearcat aria-label="Clear category">${ICON.x}</button></span>` : ''}</div>
+    <div class="list">${body}</div>
+    ${S.selecting ? `<div class="selbar"><button class="btn-secondary" data-selcancel>Cancel</button><button class="btn-secondary" data-selall>${S.picked.size === items.length ? 'Clear' : 'Select all'}</button><button class="btn" data-selarchive ${S.picked.size ? '' : 'disabled'}>Archive${S.picked.size ? ` (${S.picked.size})` : ''}</button></div>` : ''}`;
+
+  view.onclick = async (e) => {
+    const t = e.target as HTMLElement;
+    const row = t.closest<HTMLElement>('[data-open]');
+    if (row) {
+      if (S.selecting) { const id = row.dataset.open!; S.picked.has(id) ? S.picked.delete(id) : S.picked.add(id); return renderList(view); }
+      return go('detail', row.dataset.open);
+    }
+    if (t.closest('[data-search]')) return go('search');
+    if (t.closest('[data-menu]')) return openMenu();
+    if (t.closest('[data-sort]')) return openSort(cats, items.length);
+    if (t.closest('[data-clearcat]')) { S.cat = ''; return renderList(view); }
+    if (t.closest('[data-reload]')) return applyUpdate();
+    if (t.closest('[data-selcancel]')) { S.selecting = false; S.picked.clear(); return renderList(view); }
+    if (t.closest('[data-selall]')) { if (S.picked.size === items.length) S.picked.clear(); else items.forEach((i) => S.picked.add(i.id)); return renderList(view); }
+    if (t.closest('[data-selarchive]')) {
+      const ids = [...S.picked]; await archive(ids); S.selecting = false; S.picked.clear(); void renderList(view);
+      return toast(`Archived ${ids.length} thought${ids.length > 1 ? 's' : ''}`, async () => { await unarchive(ids); void render(); });
+    }
+  };
+}
+const newest = (a: Thought, b: Thought) => b.createdAt.localeCompare(a.createdAt);
+
+function openSort(cats: Category[], count: number): void {
+  const opt = (v: Sort, l: string) => `<button class="menu-item" data-v="${v}" aria-pressed="${S.sort === v}">${l}${S.sort === v ? '<span class="g">✓</span>' : ''}</button>`;
+  const sheet = openSheet(`
+    <div class="sheet-head"><h2 class="serif">Sort and filter</h2></div>
+    <div class="menu">${opt('newest', 'Newest')}${opt('oldest', 'Oldest')}${opt('category', 'By category')}${opt('revisited', 'Most revisited')}</div>
+    <div class="label" style="margin:16px 0 8px">Show only</div>
+    <div class="chips">${cats.map((c) => `<button class="chip" data-cat="${c.id}" aria-pressed="${S.cat === c.id}">${h(c.name)}</button>`).join('')}</div>
+    ${count ? `<button class="btn-secondary" style="margin-top:18px" data-select>Select thoughts</button>` : ''}`);
+  sheet.el.addEventListener('click', (e) => {
+    const t = e.target as HTMLElement;
+    const v = t.closest<HTMLElement>('[data-v]');
+    if (v) { S.sort = v.dataset.v as Sort; sheet.close(); return void render(); }
+    const c = t.closest<HTMLElement>('[data-cat]');
+    if (c) { S.cat = S.cat === c.dataset.cat ? '' : c.dataset.cat!; sheet.close(); return void render(); }
+    if (t.closest('[data-select]')) { S.selecting = true; S.picked.clear(); sheet.close(); return void render(); }
+  });
+}
+
+async function openMenu(): Promise<void> {
+  const s = await getSettings();
+  const sheet = openSheet(`
+    <div class="menu">
+      <button class="menu-item" data-go="archives">Archives ${ICON.chev}</button>
+      <button class="menu-item" disabled>Analytics <span class="muted small">Soon</span></button>
+      <button class="menu-item" disabled>Settings <span class="muted small">Soon</span></button>
+    </div>
+    <div class="label" style="margin:16px 0 8px">Theme</div>
+    <div class="seg" role="group" aria-label="Theme">${(['light', 'dark', 'system'] as Mode[]).map((m) => `<button type="button" data-mode="${m}" aria-pressed="${s.mode === m}">${m[0].toUpperCase() + m.slice(1)}</button>`).join('')}</div>`);
+  sheet.el.addEventListener('click', async (e) => {
+    const t = e.target as HTMLElement;
+    if (t.closest('[data-go]')) { sheet.close(); return go('archives'); }
+    const m = t.closest<HTMLElement>('[data-mode]');
+    if (m) {
+      applyLook(await updateSettings({ mode: m.dataset.mode as Mode }));
+      sheet.el.querySelectorAll<HTMLElement>('[data-mode]').forEach((b) => b.setAttribute('aria-pressed', String(b === m)));
+    }
+  });
+}
+
+// ── Search ──
+async function renderSearch(view: HTMLElement): Promise<void> {
+  view.innerHTML = `
+    <div class="search-top"><span class="muted">${ICON.search}</span><input class="search-in" id="q" placeholder="Search your thoughts" value="${h(S.q)}" aria-label="Search" autocomplete="off" enterkeyhint="search"><button class="link" data-cancel>Cancel</button></div>
+    <div id="results"></div>`;
+  const q = view.querySelector<HTMLInputElement>('#q')!;
+  const draw = async () => {
+    S.q = q.value;
+    const r = await search(S.q);
+    const mark = (s: string) => { const i = s.toLowerCase().indexOf(S.q.trim().toLowerCase()); return i < 0 || !S.q.trim() ? h(s) : `${h(s.slice(0, i))}<mark>${h(s.slice(i, i + S.q.trim().length))}</mark>${h(s.slice(i + S.q.trim().length))}`; };
+    const grp = (title: string, l: Thought[]) => l.length ? `<p class="group-h">${title}</p>${l.map((t) => `<button class="row" data-open="${t.id}"><span class="row-body"><span class="row-text">${mark(t.text)}</span></span></button>`).join('')}` : '';
+    const n = r.curiosity.length + r.wondering.length + r.archived.length;
+    view.querySelector('#results')!.innerHTML = !S.q.trim() ? '<p class="empty">Search ideas, questions, notes and steps.</p>'
+      : n ? grp('Curiosities', r.curiosity) + grp('Wonderings', r.wondering) + grp('Archived', r.archived) : `<p class="empty">Nothing matches “${h(S.q.trim())}”.</p>`;
+  };
+  q.addEventListener('input', () => void draw());
+  view.onclick = (e) => {
+    const t = e.target as HTMLElement;
+    if (t.closest('[data-cancel]')) { S.q = ''; return back(); }
+    const row = t.closest<HTMLElement>('[data-open]');
+    if (row) go('detail', row.dataset.open);
+  };
+  await draw();
+  q.focus();
+}
+
+// ── Archives ──
+async function renderArchives(view: HTMLElement): Promise<void> {
+  const items = (await listThoughts({ type: S.archTab, archived: true })).sort((a, b) => (b.archivedAt ?? '').localeCompare(a.archivedAt ?? ''));
+  view.innerHTML = `
+    <div class="sub-top"><button class="back" data-back>${ICON.back}<span>Archives</span></button></div>
+    <div class="tabs" role="tablist" aria-label="Archive type">
+      <button role="tab" data-arch="curiosity" aria-selected="${S.archTab === 'curiosity'}">Curiosities</button>
+      <button role="tab" data-arch="wondering" aria-selected="${S.archTab === 'wondering'}">Wonderings</button>
+    </div>
+    <p class="hint" style="margin:0 0 6px">${items.length ? 'Tap a thought for Restore or Delete.' : ''}</p>
+    <div class="list">${items.length ? items.map((t) => `<div class="row arch${S.reveal === t.id ? ' revealed' : ''}" data-reveal="${t.id}" role="button" tabindex="0"><span class="row-body"><span class="row-text">${h(t.text)}</span></span>${S.reveal === t.id ? `<span class="row-acts"><button class="link" data-restore="${t.id}">Restore</button><button class="link muted" data-del="${t.id}">Delete</button><button class="link muted" data-openarch="${t.id}">Open</button></span>` : ''}</div>`).join('') : '<p class="empty">Nothing archived here.</p>'}</div>
+    ${items.length > 1 ? `<button class="link muted" style="margin-top:20px" data-delall>Delete all archived ${plural(S.archTab).toLowerCase()}</button>` : ''}`;
+  view.onclick = async (e) => {
+    const t = e.target as HTMLElement;
+    if (t.closest('[data-back]')) return back();
+    const at = t.closest<HTMLElement>('[data-arch]');
+    if (at) { S.archTab = at.dataset.arch as ThoughtType; S.reveal = ''; return renderArchives(view); }
+    const rs = t.closest<HTMLElement>('[data-restore]');
+    if (rs) { const id = rs.dataset.restore!; await unarchive([id]); S.reveal = ''; void renderArchives(view); return toast(`Back in ${plural(S.archTab)}`, async () => { await archive([id]); void render(); }); }
+    const dl = t.closest<HTMLElement>('[data-del]');
+    if (dl) { const id = dl.dataset.del!; await softDelete([id]); S.reveal = ''; void renderArchives(view); return toast('Thought deleted', async () => { await restore([id]); void render(); }); }
+    const op = t.closest<HTMLElement>('[data-openarch]');
+    if (op) return go('detail', op.dataset.openarch);
+    if (t.closest('[data-delall]')) return confirmDeleteAll(items.map((i) => i.id));
+    const rv = t.closest<HTMLElement>('[data-reveal]');
+    if (rv) { S.reveal = S.reveal === rv.dataset.reveal ? '' : rv.dataset.reveal!; return renderArchives(view); }
+  };
+}
+
+function confirmDeleteAll(ids: string[]): void {
+  const sheet = openSheet(`
+    <div class="sheet-head"><h2 class="serif">Delete ${ids.length} archived ${plural(S.archTab).toLowerCase()}?</h2></div>
+    <p class="muted" style="margin:0 0 18px">They stay in Recently deleted for 30 days.</p>
+    <div class="two"><button class="btn-secondary" data-no>Cancel</button><button class="btn danger" data-yes>Delete ${ids.length}</button></div>`);
+  sheet.el.addEventListener('click', async (e) => {
+    const t = e.target as HTMLElement;
+    if (t.closest('[data-no]')) return sheet.close();
+    if (t.closest('[data-yes]')) {
+      await softDelete(ids); sheet.close(); void render();
+      toast(`Deleted ${ids.length}`, async () => { await restore(ids); void render(); });
+    }
+  });
+}
+
+/** Swipe right anywhere on a sub-screen to go back; the page follows the finger. */
+function enableSwipeBack(): void {
+  let x0 = 0, y0 = 0, on = false, drag = false;
+  const view = () => document.getElementById('view')!;
+  document.addEventListener('touchstart', (e) => {
+    if (S.view === 'list' || document.querySelector('.sheet-back') || e.touches.length > 1) return;
+    const tt = e.target as HTMLElement;
+    if (tt.closest('input,textarea,[data-grip]')) return;
+    x0 = e.touches[0].clientX; y0 = e.touches[0].clientY; on = true; drag = false;
+  }, { passive: true });
+  document.addEventListener('touchmove', (e) => {
+    if (!on) return;
+    const dx = e.touches[0].clientX - x0, dy = e.touches[0].clientY - y0;
+    if (!drag) { if (Math.abs(dy) > 12 && Math.abs(dy) > Math.abs(dx)) { on = false; return; } if (dx > 12 && dx > Math.abs(dy)) drag = true; }
+    if (drag) view().style.transform = `translateX(${Math.max(0, dx) * 0.6}px)`;
+  }, { passive: true });
+  document.addEventListener('touchend', (e) => {
+    if (!on) return;
+    on = false;
+    const dx = e.changedTouches[0].clientX - x0;
+    const v = view();
+    v.style.transition = 'transform .2s ease'; v.style.transform = '';
+    setTimeout(() => { v.style.transition = ''; }, 220);
+    if (drag && dx > 90) back();
+  });
+}

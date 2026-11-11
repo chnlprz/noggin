@@ -1,0 +1,59 @@
+// Small UI helpers shared by every screen: escaping, icons, toast with Undo, bottom sheets.
+export { escapeHTML as h } from '../lib/util';
+
+const svg = (d: string, extra = '') => `<svg class="ic" viewBox="0 0 24 24" aria-hidden="true" ${extra}>${d}</svg>`;
+export const ICON = {
+  search: svg('<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>'),
+  menu: svg('<path d="M4 7h16M4 12h16M4 17h10"/>'),
+  plus: svg('<path d="M12 5v14M5 12h14"/>'),
+  x: svg('<path d="M6 6l12 12M18 6 6 18"/>'),
+  back: svg('<path d="M15 18l-6-6 6-6"/>'),
+  grip: svg('<path d="M9 6h.01M15 6h.01M9 12h.01M15 12h.01M9 18h.01M15 18h.01"/>', 'style="stroke-width:3"'),
+  chev: svg('<path d="M9 6l6 6-6 6"/>'),
+};
+
+let toastTimer = 0;
+/** One toast at a time, bottom of the screen. Undo runs the given function once. */
+export function toast(msg: string, undo?: () => void | Promise<void>, ms = undo ? 5000 : 2600): void {
+  let el = document.getElementById('toast');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'toast'; el.className = 'toast'; el.setAttribute('role', 'status');
+    document.body.appendChild(el);
+  }
+  el.innerHTML = `<span></span>${undo ? '<button type="button">Undo</button>' : ''}`;
+  el.querySelector('span')!.textContent = msg;
+  const btn = el.querySelector('button');
+  if (btn && undo) btn.addEventListener('click', () => { hideToast(); void undo(); }, { once: true });
+  el.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = window.setTimeout(hideToast, ms);
+}
+export function hideToast(): void { document.getElementById('toast')?.classList.remove('show'); }
+
+/** Bottom sheet (phone) / centred panel. Returns the sheet element; close() removes it. */
+export function openSheet(html: string, onClose?: () => void): { el: HTMLElement; close: () => void } {
+  const back = document.createElement('div');
+  back.className = 'sheet-back';
+  back.innerHTML = `<section class="sheet" role="dialog" aria-modal="true">${html}</section>`;
+  document.body.appendChild(back);
+  const el = back.querySelector<HTMLElement>('.sheet')!;
+  let closed = false;
+  const close = () => {
+    if (closed) return; closed = true;
+    document.removeEventListener('keydown', onKey);
+    back.classList.add('closing');
+    setTimeout(() => back.remove(), 180);
+    onClose?.();
+  };
+  const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') close(); };
+  document.addEventListener('keydown', onKey);
+  back.addEventListener('pointerdown', (e) => { if (e.target === back) close(); });
+  return { el, close };
+}
+
+/** Grow a textarea to fit its text. */
+export function autogrow(t: HTMLTextAreaElement): void {
+  t.style.height = 'auto';
+  t.style.height = `${t.scrollHeight + 2}px`;
+}
