@@ -6,7 +6,7 @@ import { ensureSeeded, getSettings, purgeDeleted } from './db/db';
 import { applyLook, onSystemModeChange } from './lib/look';
 import { isInstalled, requestPersistence } from './lib/storage';
 import { renderWelcome } from './ui/onboarding';
-import { render, startShell } from './ui/shell';
+import { openThought, render, startShell } from './ui/shell';
 import { startAutoSync } from './lib/cloud';
 
 // No pinch zoom (text size lives in Settings).
@@ -28,6 +28,10 @@ const app = document.getElementById('app')!;
     if (document.querySelector('.shell')) { void getSettings().then(applyLook); void render(); }
   };
   startAutoSync(redraw);
-  if (s.onboarded) startShell(app);
+  // From Nudge!'s "Open in Noggin?" (#t-<thought id>)
+  const deep = location.hash.match(/^#t-(.+)$/);
+  if (deep) history.replaceState(null, '', location.pathname);
+  if (s.onboarded) { startShell(app); if (deep) setTimeout(() => openThought(decodeURIComponent(deep[1])), 50); }
   else renderWelcome(app, () => startShell(app));
+  // Thought not on this device yet (another device, before sync): the details screen just goes back to the list.
 })();

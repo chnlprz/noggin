@@ -35,6 +35,8 @@ function schema(db: D1Database) {
     db.prepare('CREATE TABLE IF NOT EXISTS sessions (token TEXT PRIMARY KEY, user_id TEXT, expires_at INTEGER)'),
     db.prepare('CREATE TABLE IF NOT EXISTS challenges (id TEXT PRIMARY KEY, challenge TEXT, user_id TEXT, expires_at INTEGER)'),
     db.prepare('CREATE TABLE IF NOT EXISTS feedback (id TEXT PRIMARY KEY, created_at INTEGER, user_id TEXT, kind TEXT, message TEXT, reply_to TEXT, info TEXT, version TEXT, ip TEXT, mailed INTEGER DEFAULT 0)'),
+    db.prepare('CREATE TABLE IF NOT EXISTS handoffs (id TEXT PRIMARY KEY, user_id TEXT, from_app TEXT, thought_id TEXT, step_id TEXT, text TEXT, thought_text TEXT, category_name TEXT, state TEXT, task_id TEXT, created_at INTEGER, updated_at INTEGER)'),
+    db.prepare('CREATE INDEX IF NOT EXISTS handoffs_user ON handoffs (user_id, state)'),
     db.prepare('CREATE TABLE IF NOT EXISTS noggin_rev (user_id TEXT PRIMARY KEY, rev INTEGER DEFAULT 0)'),
     db.prepare('CREATE TABLE IF NOT EXISTS noggin_rows (user_id TEXT, tbl TEXT, id TEXT, data TEXT, rev INTEGER, PRIMARY KEY (user_id, tbl, id))'),
     db.prepare('CREATE INDEX IF NOT EXISTS noggin_rows_rev ON noggin_rows (user_id, rev)'),
@@ -178,6 +180,24 @@ async function api(req: Request, env: Env, url: URL): Promise<Response> {
     const since = Number(body.since) || 0;
     const out = (await env.DB.prepare('SELECT tbl AS t, id, data AS d, rev FROM noggin_rows WHERE user_id = ? AND rev > ? ORDER BY rev LIMIT 20000').bind(uid, since).all()).results;
     return json({ rev, rows: out });
+  }
+  // ── Handoff to Nudge! (Phase 7): queue steps; Nudge! claims them and reports back; Noggin? reads the states ──
+  if (path === '/handoff/send') {
+    const items: { id: string; thoughtId: string; stepId: string; text: string; thoughtText?: string; categoryName?: string }[] = Array.isArray(body.items) ? body.items.slice(0, 100) : [];
+    const stmt = env.DB.prepare("INSERT OR IGNORE INTO handoffs (id, user_id, from_app, thought_id, step_id, text, thought_text, category_name, state, created_at, updated_at) VALUES (?, ?, 'noggin', ?, ?, ?, ?, ?, 'queued', ?, ?)");
+    const now = Date.now();
+    const list = items.filter((i) => i.id && String(i.text ?? '').trim()).map((i) => stmt.bind(String(i.id).slice(0, 80), uid, String(i.thoughtId).slice(0, 80), String(i.stepId).slice(0, 80), String(i.text).trim().slice(0, 300), String(i.thoughtText ?? '').slice(0, 600), String(i.categoryName ?? '').slice(0, 40), now, now));
+    if (list.length) await env.DB.batch(list);
+    return json({ ok: true, n: list.length });
+  }
+  if (path === '/handoff/cancel') {
+    // Only before Nudge! has picked it up
+    const r = await env.DB.prepare("UPDATE handoffs SET state = 'cancelled', updated_at = ? WHERE id = ? AND user_id = ? AND state = 'queued'").bind(Date.now(), String(body.id ?? ''), uid).run();
+    return json({ ok: (r.meta?.changes ?? 0) > 0 });
+  }
+  if (path === '/handoff/list') {
+    const out = (await env.DB.prepare("SELECT id, state, task_id AS taskId, updated_at AS at FROM handoffs WHERE user_id = ? AND from_app = 'noggin' ORDER BY created_at DESC LIMIT 2000").bind(uid).all()).results;
+    return json({ items: out });
   }
   return oops(404, 'not-found');
 }

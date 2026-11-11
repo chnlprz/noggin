@@ -40,6 +40,9 @@ const wideMQ = matchMedia('(min-width: 768px)');
 const wide = () => wideMQ.matches;
 const plural = (t: ThoughtType) => (t === 'curiosity' ? 'Curiosities' : 'Wonderings');
 
+/** Open one thought (from Nudge!'s "Open in Noggin?" link, #t-<id>). */
+export function openThought(id: string): void { go('detail', id); }
+
 export function startShell(root: HTMLElement): void {
   app = root;
   app.innerHTML = `<aside class="sidebar" id="side" aria-label="Noggin?"></aside><div class="shell"><div id="view"></div></div><nav class="bottombar" id="bar" aria-label="Lists"></nav>`;

@@ -42,6 +42,7 @@ export interface Step {
   nudgeTaskId?: ID;
   sentAt?: ISOTime;
   doneAt?: ISOTime;
+  queued?: boolean; // sent while offline: goes up on the next sync
   updatedAt: ISOTime;
 }
 

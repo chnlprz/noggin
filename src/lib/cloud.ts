@@ -128,7 +128,8 @@ export function syncNow(): Promise<number> {
 /** A change here goes up about 2 seconds later; while open it checks every 15 s, and on return and when back online. */
 export function startAutoSync(onChanged: () => void): void {
   window.addEventListener('noggin:synced', onChanged);
-  const go = () => void syncNow();
+  // After each sync, steps sent to Nudge! go up and their status comes back (Phase 7).
+  const go = () => void syncNow().then(async () => { if (await (await import('./handoff')).syncHandoffs()) onChanged(); });
   let soon = 0;
   const later = () => { if (applying || !cloud.get().signedIn) return; clearTimeout(soon); soon = window.setTimeout(go, 1500); };
   for (const t of db.tables) {

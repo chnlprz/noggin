@@ -56,7 +56,7 @@ export async function renderSettings(view: HTMLElement, nav: Nav, to?: Page): Pr
   if (page === 'still') body = `${grp('', [tog('stillCurious', 'Show one old thought a day', s.stillCurious, 'A thought 7+ days old you haven’t opened in a week'), tog('weeklyNudge', 'Weekly notification', false, 'Coming soon', true)])}<p class="hint">Not now hides a thought for 14 days. None on a day you’ve already caught 3 or more.</p>`;
 
   if (page === 'nudge') body = `${grp('', [tog('sendToNudge', 'Send steps to Nudge!', s.sendToNudge, 'Shows the Send button on a thought’s steps')])}
-    <p class="hint">Signed in, sent steps become Nudge! tasks marked “from Noggin?”, and their status comes back here. Signed out, they’re copied into Nudge!’s batch add. Arrives in an update soon.</p>
+    <p class="hint">Signed in, sent steps become Nudge! tasks marked “from Noggin?”, and their status comes back here. Signed out, they’re copied into Nudge!’s Batch add.</p>
     ${grp('', [`<a class="srow" href="https://nudge.innovaspace.app" target="_blank" rel="noopener"><span class="sbody"><span class="stitle">Open Nudge!</span><span class="ssub">nudge.innovaspace.app</span></span><span class="chev">${ICON.chev}</span></a>`])}`;
 
   if (page === 'look') {
@@ -104,7 +104,7 @@ export async function renderSettings(view: HTMLElement, nav: Nav, to?: Page): Pr
     <li>Catch a thought: One or Several, Keep adding, paragraphs</li><li>Curiosities and Wonderings, details, steps, search, Archives</li>
     <li>Still curious?: one old thought a day</li><li>Analytics: your thought patterns</li><li>Settings, backups, Recently deleted, a Thoughts rising welcome</li>
     <li>Sign in with your Innova Space passkey and sync your devices</li><li>Desktop layout</li></ul>
-    <p class="hint" style="margin:0">Next: sending steps to Nudge!.</p></section>`;
+    <p class="hint" style="margin:0">Also new: send a thought’s steps to Nudge!. They arrive marked “? Noggin”, and Done or Removed shows here.</p></section>`;
 
   view.innerHTML = `
     <header class="set-top">${page === 'main' && nav.wide ? '' : `<button class="icon-btn" data-back aria-label="Back">${ICON.back}</button>`}<h1 class="serif">${TITLES[page]}</h1></header>

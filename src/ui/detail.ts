@@ -3,6 +3,9 @@ import { db } from '../db/db';
 import type { Step, StepState, Thought } from '../db/types';
 import { addStep, archive, categories, editStep, markOpened, removeStep, reorderSteps, softDelete, stepsOf, unarchive, restore, updateThought } from '../logic/thoughts';
 import { autogrow, h, ICON, toast } from './kit';
+import { getSettings } from '../db/db';
+import { cloud } from '../lib/cloud';
+import { cancelStep, copySteps, sendSteps } from '../lib/handoff';
 
 const STATE: Record<StepState, { text: string; cls: string } | null> = {
   draft: null,
@@ -20,6 +23,9 @@ export async function renderDetail(view: HTMLElement, id: string, nav: { back: (
   if (!t || t.deletedAt) { nav.back(); return; }
   const [cats, steps] = await Promise.all([categories(), stepsOf(id)]);
   const drafts = steps.filter((s) => s.state === 'draft' && s.text.trim()).length;
+  const st = await getSettings();
+  const signedIn = cloud.get().signedIn;
+  const sendLabel = `${signedIn ? 'Send' : 'Copy'} ${drafts} step${drafts > 1 ? 's' : ''} to Nudge!`;
 
   view.innerHTML = `
     <div class="sub-top detail-top"><button class="back" data-back>${ICON.back}<span>Back</span></button></div>
@@ -36,7 +42,7 @@ export async function renderDetail(view: HTMLElement, id: string, nav: { back: (
     <div class="steps" id="dSteps">${steps.map(stepRow).join('')}</div>
     <form class="add-step" id="dAdd"><input class="field" id="dNew" placeholder="Add a next step" aria-label="Add a next step" autocomplete="off" enterkeyhint="done"><button class="icon-btn" aria-label="Add step">${ICON.plus}</button></form>
     <div class="detail-actions">
-      ${drafts ? `<button class="btn" type="button" data-send>Send ${drafts} step${drafts > 1 ? 's' : ''} to Nudge!</button>` : ''}
+      ${drafts && st.sendToNudge ? `<button class="btn" type="button" data-send>${sendLabel}</button>${signedIn ? '' : '<p class="hint" style="text-align:center;margin:-4px 0 0">Opens Nudge!’s Batch add. Sign in to see their status here.</p>'}` : ''}
       <div class="quiet-row"><button class="link muted" type="button" data-archive>${t.archivedAt ? 'Restore from Archives' : 'Archive'}</button><span class="muted">·</span><button class="link muted" type="button" data-delete>Delete</button></div>
     </div>`;
 
@@ -81,8 +87,24 @@ export async function renderDetail(view: HTMLElement, id: string, nav: { back: (
       return toast('Step removed', async () => { await db.steps.put(s); void renderDetail(view, id, nav, false); });
     }
     if (el.closest('[data-send]')) {
-      // Phase 7 builds the real handoff. Until then the steps stay here as drafts.
-      return toast('Sending to Nudge! comes in a later update. Your steps are saved here.', undefined, 4000);
+      const ds = (await stepsOf(id)).filter((s) => s.state === 'draft' && s.text.trim());
+      if (!ds.length) return;
+      if (!cloud.get().signedIn) { await copySteps(ds); toast(`Copied ${ds.length} step${ds.length > 1 ? 's' : ''} into Nudge!’s Batch add`); return renderDetail(view, id, nav, false); }
+      const r = await sendSteps(t, ds);
+      toast(r === 'sent' ? `${ds.length} step${ds.length > 1 ? 's' : ''} sent to Nudge!` : 'Saved here. They’ll go to Nudge! when you’re back online.', undefined, 3500);
+      return renderDetail(view, id, nav, false);
+    }
+    const cs = el.closest<HTMLElement>('[data-cancel]');
+    if (cs) {
+      const s = steps.find((x) => x.id === cs.dataset.cancel)!;
+      toast((await cancelStep(s)) ? 'Taken back. Nothing went to Nudge!.' : 'Nudge! already has it. Nothing changed.');
+      return renderDetail(view, id, nav, false);
+    }
+    const sa = el.closest<HTMLElement>('[data-again]');
+    if (sa) {
+      const s = steps.find((x) => x.id === sa.dataset.again)!;
+      await sendSteps(t, [s]); toast('Sent to Nudge! again');
+      return renderDetail(view, id, nav, false);
     }
     if (el.closest('[data-archive]')) {
       if (t.archivedAt) { await unarchive([id]); toast(`Back in ${t.type === 'curiosity' ? 'Curiosities' : 'Wonderings'}`); return renderDetail(view, id, nav, false); }
@@ -103,7 +125,11 @@ function stepRow(s: Step): string {
   const body = editable(s)
     ? `<input class="step-in" data-step-in="${s.id}" value="${h(s.text)}" aria-label="Step">`
     : `<span class="step-text">${h(s.text)}</span>`;
-  const right = st
+  const right = s.state === 'waiting'
+    ? `<b class="st-m">Waiting · <button class="link" data-cancel="${s.id}">Cancel</button></b>`
+    : s.state === 'removed'
+    ? `<b class="st-m">Removed in Nudge · <button class="link" data-again="${s.id}">Send again</button></b>`
+    : st
     ? `<b class="${st.cls}">${st.text}</b>`
     : `<button class="icon-btn sm" data-rm="${s.id}" aria-label="Remove step">${ICON.x}</button>`;
   return `<div class="step" data-id="${s.id}"><span class="grip" data-grip aria-hidden="true">${ICON.grip}</span>${body}${right}</div>`;
