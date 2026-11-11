@@ -40,12 +40,16 @@ export function startShell(root: HTMLElement): void {
   window.addEventListener('popstate', () => { S.view = (history.state?.view as View) ?? 'list'; S.id = history.state?.id ?? ''; void render(); });
   window.addEventListener('noggin:update-ready', () => void render());
   document.addEventListener('keydown', (e) => {
+    const r = e.target as HTMLElement;
+    if ((e.key === 'Enter' || e.key === ' ') && r.getAttribute('role') === 'button' && r.classList.contains('row')) { e.preventDefault(); r.click(); return; }
     const typing = /INPUT|TEXTAREA/.test((e.target as HTMLElement).tagName);
     if (typing || document.querySelector('.sheet-back')) return;
     if (e.key === 'n' || e.key === 'N') { e.preventDefault(); plus(); }
     if (e.key === '/') { e.preventDefault(); go('search'); }
   });
   enableSwipeBack();
+  // A long-press swallows only the click that comes right after it.
+  document.addEventListener('pointerup', () => { if (pressed) setTimeout(() => { pressed = false; }, 60); });
   void render();
 }
 
@@ -150,7 +154,8 @@ async function renderList(view: HTMLElement): Promise<void> {
     const c = counts.get(t.id);
     const meta = [t.categoryId && catName.get(t.categoryId) ? h(catName.get(t.categoryId)!) : '', c?.total ? `${c.total} step${c.total > 1 ? 's' : ''}` : '', c?.inNudge ? `<span class="g">${c.inNudge} in Nudge</span>` : '', t.note && !c?.total ? 'has a note' : ''].filter(Boolean).join(' · ');
     const picked = S.picked.has(t.id);
-    return `<button class="row${S.selecting ? ' selecting' : ''}${wide() && S.id === t.id ? ' on' : ''}" data-open="${t.id}" ${S.selecting ? `aria-pressed="${picked}"` : ''}>${S.selecting ? `<span class="check${picked ? ' on' : ''}" aria-hidden="true">${picked ? '✓' : ''}</span>` : ''}<span class="row-body"><span class="row-text">${h(t.text)}</span>${meta ? `<span class="meta">${meta}</span>` : ''}</span></button>`;
+    const quick = S.selecting ? '' : `<span class="row-quick"><button class="icon-btn sm" data-qarch="${t.id}" aria-label="Archive" title="Archive">${ICON.archive}</button><button class="icon-btn sm" data-qdel="${t.id}" aria-label="Delete" title="Delete">${ICON.trash}</button></span>`;
+    return `<div class="row${S.selecting ? ' selecting' : ''}${wide() && S.id === t.id ? ' on' : ''}" data-open="${t.id}" role="button" tabindex="0" ${S.selecting ? `aria-pressed="${picked}"` : ''}>${S.selecting ? `<span class="check${picked ? ' on' : ''}" aria-hidden="true">${picked ? '✓' : ''}</span>` : ''}<span class="row-body"><span class="row-text">${h(t.text)}</span>${meta ? `<span class="meta">${meta}</span>` : ''}</span>${quick}</div>`;
   };
   let body: string;
   if (!items.length) {
@@ -167,47 +172,71 @@ async function renderList(view: HTMLElement): Promise<void> {
     <header class="topbar"><h1 class="greet serif">${h(S.greet[S.tab]!)}</h1>
       <div class="top-icons"><button class="icon-btn" data-search aria-label="Search">${ICON.search}</button><button class="icon-btn" data-menu aria-label="Menu">${ICON.menu}</button></div></header>
     ${update}
-    <div class="list-tools"><button class="link muted" data-sort>${sortLabel} ▾</button>${S.cat ? `<span class="chip on">${h(catName.get(S.cat) ?? '')}<button class="chip-x" data-clearcat aria-label="Clear category">${ICON.x}</button></span>` : ''}</div>
+    <div class="list-tools"><button class="link muted" data-sort>${sortLabel} ▾</button>${items.length && !S.selecting ? '<button class="link muted push" data-select>Select</button>' : ''}${S.cat ? `<span class="chip on">${h(catName.get(S.cat) ?? '')}<button class="chip-x" data-clearcat aria-label="Clear category">${ICON.x}</button></span>` : ''}</div>
     <div class="list">${body}</div>
-    ${S.selecting ? `<div class="selbar"><button class="btn-secondary" data-selcancel>Cancel</button><button class="btn-secondary" data-selall>${S.picked.size === items.length ? 'Clear' : 'Select all'}</button><button class="btn" data-selarchive ${S.picked.size ? '' : 'disabled'}>Archive${S.picked.size ? ` (${S.picked.size})` : ''}</button></div>` : ''}`;
+    ${S.selecting ? `<div class="selbar"><button class="btn-secondary" data-selcancel>Cancel</button><button class="btn-secondary" data-selall>${S.picked.size === items.length ? 'Clear' : 'Select all'}</button><button class="btn-secondary" data-selarchive ${S.picked.size ? '' : 'disabled'}>Archive${S.picked.size ? ` (${S.picked.size})` : ''}</button><button class="btn danger" data-seldel ${S.picked.size ? '' : 'disabled'}>Delete${S.picked.size ? ` (${S.picked.size})` : ''}</button></div>` : ''}`;
+  if (!S.selecting) longPress(view, (id) => { S.selecting = true; S.picked = new Set([id]); void render(); });
 
   view.onclick = async (e) => {
     const t = e.target as HTMLElement;
+    if (pressed) { pressed = false; return; } // the click right after a long-press
+    const qa = t.closest<HTMLElement>('[data-qarch]');
+    if (qa) { const id = qa.dataset.qarch!; await archive([id]); if (S.id === id) S.id = ''; void render(); return toast('Archived', async () => { await unarchive([id]); void render(); }); }
+    const qd = t.closest<HTMLElement>('[data-qdel]');
+    if (qd) { const id = qd.dataset.qdel!; await softDelete([id]); if (S.id === id) S.id = ''; void render(); return toast('Thought deleted', async () => { await restore([id]); void render(); }); }
+    if (t.closest('[data-select]')) { S.selecting = true; S.picked.clear(); return void render(); }
+    if (t.closest('[data-seldel]')) {
+      const ids = [...S.picked]; await softDelete(ids); if (ids.includes(S.id)) S.id = ''; S.selecting = false; S.picked.clear(); void render();
+      return toast(`Deleted ${ids.length} thought${ids.length > 1 ? 's' : ''}`, async () => { await restore(ids); void render(); });
+    }
     const row = t.closest<HTMLElement>('[data-open]');
     if (row) {
-      if (S.selecting) { const id = row.dataset.open!; S.picked.has(id) ? S.picked.delete(id) : S.picked.add(id); return renderList(view); }
+      if (S.selecting) { const id = row.dataset.open!; S.picked.has(id) ? S.picked.delete(id) : S.picked.add(id); return void render(); }
       return go('detail', row.dataset.open);
     }
     if (t.closest('[data-search]')) return go('search');
     if (t.closest('[data-menu]')) return openMenu();
-    if (t.closest('[data-sort]')) return openSort(cats, items.length);
+    if (t.closest('[data-sort]')) return openSort(cats);
     if (t.closest('[data-clearcat]')) { S.cat = ''; return renderList(view); }
     if (t.closest('[data-reload]')) return applyUpdate();
-    if (t.closest('[data-selcancel]')) { S.selecting = false; S.picked.clear(); return renderList(view); }
-    if (t.closest('[data-selall]')) { if (S.picked.size === items.length) S.picked.clear(); else items.forEach((i) => S.picked.add(i.id)); return renderList(view); }
+    if (t.closest('[data-selcancel]')) { S.selecting = false; S.picked.clear(); return void render(); }
+    if (t.closest('[data-selall]')) { if (S.picked.size === items.length) S.picked.clear(); else items.forEach((i) => S.picked.add(i.id)); return void render(); }
     if (t.closest('[data-selarchive]')) {
-      const ids = [...S.picked]; await archive(ids); S.selecting = false; S.picked.clear(); void renderList(view);
+      const ids = [...S.picked]; await archive(ids); if (ids.includes(S.id)) S.id = ''; S.selecting = false; S.picked.clear(); void render();
       return toast(`Archived ${ids.length} thought${ids.length > 1 ? 's' : ''}`, async () => { await unarchive(ids); void render(); });
     }
   };
 }
 const newest = (a: Thought, b: Thought) => b.createdAt.localeCompare(a.createdAt);
 
-function openSort(cats: Category[], count: number): void {
+/** Hold a row for half a second to start selecting with it picked. The click right after is swallowed. */
+let pressed = false;
+function longPress(root: HTMLElement, fire: (id: string) => void): void {
+  let timer = 0, x = 0, y = 0;
+  root.onpointerdown = (e) => {
+    const row = (e.target as HTMLElement).closest<HTMLElement>('[data-open]');
+    if (!row || (e.target as HTMLElement).closest('button')) return;
+    x = e.clientX; y = e.clientY;
+    timer = window.setTimeout(() => { pressed = true; navigator.vibrate?.(10); fire(row.dataset.open!); }, 500);
+  };
+  root.onpointermove = (e) => { if (timer && Math.hypot(e.clientX - x, e.clientY - y) > 8) { clearTimeout(timer); timer = 0; } };
+  root.onpointerup = root.onpointercancel = () => { clearTimeout(timer); timer = 0; };
+}
+
+function openSort(cats: Category[]): void {
   const opt = (v: Sort, l: string) => `<button class="menu-item" data-v="${v}" aria-pressed="${S.sort === v}">${l}${S.sort === v ? '<span class="g">✓</span>' : ''}</button>`;
   const sheet = openSheet(`
     <div class="sheet-head"><h2 class="serif">Sort and filter</h2></div>
     <div class="menu">${opt('newest', 'Newest')}${opt('oldest', 'Oldest')}${opt('category', 'By category')}${opt('revisited', 'Most revisited')}</div>
     <div class="label" style="margin:16px 0 8px">Show only</div>
     <div class="chips">${cats.map((c) => `<button class="chip" data-cat="${c.id}" aria-pressed="${S.cat === c.id}">${h(c.name)}</button>`).join('')}</div>
-    ${count ? `<button class="btn-secondary" style="margin-top:18px" data-select>Select thoughts</button>` : ''}`);
+    `);
   sheet.el.addEventListener('click', (e) => {
     const t = e.target as HTMLElement;
     const v = t.closest<HTMLElement>('[data-v]');
     if (v) { S.sort = v.dataset.v as Sort; sheet.close(); return void render(); }
     const c = t.closest<HTMLElement>('[data-cat]');
     if (c) { S.cat = S.cat === c.dataset.cat ? '' : c.dataset.cat!; sheet.close(); return void render(); }
-    if (t.closest('[data-select]')) { S.selecting = true; S.picked.clear(); sheet.close(); return void render(); }
   });
 }
 
@@ -267,9 +296,10 @@ async function renderArchives(view: HTMLElement): Promise<void> {
       <button role="tab" data-arch="curiosity" aria-selected="${S.archTab === 'curiosity'}">Curiosities</button>
       <button role="tab" data-arch="wondering" aria-selected="${S.archTab === 'wondering'}">Wonderings</button>
     </div>
-    <p class="hint" style="margin:0 0 6px">${items.length ? 'Tap a thought for Restore or Delete.' : ''}</p>
-    <div class="list">${items.length ? items.map((t) => `<div class="row arch${S.reveal === t.id ? ' revealed' : ''}" data-reveal="${t.id}" role="button" tabindex="0"><span class="row-body"><span class="row-text">${h(t.text)}</span></span>${S.reveal === t.id ? `<span class="row-acts"><button class="link" data-restore="${t.id}">Restore</button><button class="link muted" data-del="${t.id}">Delete</button><button class="link muted" data-openarch="${t.id}">Open</button></span>` : ''}</div>`).join('') : '<p class="empty">Nothing archived here.</p>'}</div>
-    ${items.length > 1 ? `<button class="link muted" style="margin-top:20px" data-delall>Delete all archived ${plural(S.archTab).toLowerCase()}</button>` : ''}`;
+    <div class="list-tools"><span class="hint" style="margin:0">${items.length && !S.selecting ? 'Tap a thought for Restore or Delete.' : ''}</span>${items.length && !S.selecting ? '<button class="link muted push" data-select>Select</button>' : ''}</div>
+    <div class="list">${items.length ? items.map((t) => `<div class="row arch${S.reveal === t.id ? ' revealed' : ''}" data-reveal="${t.id}" role="button" tabindex="0" ${S.selecting ? `aria-pressed="${S.picked.has(t.id)}"` : ''}>${S.selecting ? `<span class="check${S.picked.has(t.id) ? ' on' : ''}" aria-hidden="true">${S.picked.has(t.id) ? '✓' : ''}</span>` : ''}<span class="row-body"><span class="row-text">${h(t.text)}</span></span>${S.reveal === t.id ? `<span class="row-acts"><button class="link" data-restore="${t.id}">Restore</button><button class="link muted" data-del="${t.id}">Delete</button><button class="link muted" data-openarch="${t.id}">Open</button></span>` : ''}</div>`).join('') : '<p class="empty">Nothing archived here.</p>'}</div>
+    ${items.length > 1 && !S.selecting ? `<button class="link muted" style="margin-top:20px" data-delall>Delete all archived ${plural(S.archTab).toLowerCase()}</button>` : ''}
+    ${S.selecting ? `<div class="selbar"><button class="btn-secondary" data-selcancel>Cancel</button><button class="btn-secondary" data-selall>${S.picked.size === items.length ? 'Clear' : 'Select all'}</button><button class="btn-secondary" data-selrestore ${S.picked.size ? '' : 'disabled'}>Restore${S.picked.size ? ` (${S.picked.size})` : ''}</button><button class="btn danger" data-seldel ${S.picked.size ? '' : 'disabled'}>Delete${S.picked.size ? ` (${S.picked.size})` : ''}</button></div>` : ''}`;
   view.onclick = async (e) => {
     const t = e.target as HTMLElement;
     if (t.closest('[data-back]')) return back();
@@ -282,7 +312,19 @@ async function renderArchives(view: HTMLElement): Promise<void> {
     const op = t.closest<HTMLElement>('[data-openarch]');
     if (op) return go('detail', op.dataset.openarch);
     if (t.closest('[data-delall]')) return confirmDeleteAll(items.map((i) => i.id));
+    if (t.closest('[data-select]')) { S.selecting = true; S.picked.clear(); S.reveal = ''; return void render(); }
+    if (t.closest('[data-selcancel]')) { S.selecting = false; S.picked.clear(); return void render(); }
+    if (t.closest('[data-selall]')) { if (S.picked.size === items.length) S.picked.clear(); else items.forEach((i) => S.picked.add(i.id)); return void render(); }
+    if (t.closest('[data-selrestore]')) {
+      const ids = [...S.picked]; await unarchive(ids); S.selecting = false; S.picked.clear(); void render();
+      return toast(`Restored ${ids.length}`, async () => { await archive(ids); void render(); });
+    }
+    if (t.closest('[data-seldel]')) {
+      const ids = [...S.picked]; await softDelete(ids); S.selecting = false; S.picked.clear(); void render();
+      return toast(`Deleted ${ids.length}`, async () => { await restore(ids); void render(); });
+    }
     const rv = t.closest<HTMLElement>('[data-reveal]');
+    if (rv && S.selecting) { const id = rv.dataset.reveal!; S.picked.has(id) ? S.picked.delete(id) : S.picked.add(id); return void render(); }
     if (rv) { S.reveal = S.reveal === rv.dataset.reveal ? '' : rv.dataset.reveal!; return renderArchives(view); }
   };
 }
