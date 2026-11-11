@@ -28,7 +28,7 @@ const S = {
   swiped: '', // phone: list row swiped left, showing Archive · Delete
   selecting: false,
   picked: new Set<string>(),
-  greet: {} as Partial<Record<ThoughtType, string>>,
+  greet: '', // one greeting per open, same on both lists
 };
 
 let app: HTMLElement;
@@ -144,9 +144,9 @@ async function renderList(view: HTMLElement): Promise<void> {
   const rise = firstPaint; firstPaint = false;
   const s = await getSettings();
   const meta = await db.meta.get('meta');
-  if (!S.greet[S.tab]) {
-    S.greet[S.tab] = pickGreeting(s.name, S.tab, meta?.lastGreeting);
-    await db.meta.update('meta', { lastGreeting: S.greet[S.tab] });
+  if (!S.greet) {
+    S.greet = pickGreeting(s.name, meta?.lastGreeting);
+    await db.meta.update('meta', { lastGreeting: S.greet });
   }
   const [all, cats, counts] = await Promise.all([listThoughts({ type: S.tab, archived: false }), categories(), stepCounts()]);
   const items = S.cat ? all.filter((t) => t.categoryId === S.cat) : all;
@@ -177,7 +177,7 @@ async function renderList(view: HTMLElement): Promise<void> {
   }
 
   view.innerHTML = `
-    <header class="topbar"><h1 class="greet serif">${h(S.greet[S.tab]!)}</h1>
+    <header class="topbar"><h1 class="greet serif">${h(S.greet)}</h1>
       <div class="top-icons"><button class="icon-btn" data-search aria-label="Search">${ICON.search}</button><button class="icon-btn" data-menu aria-label="Menu">${ICON.menu}</button></div></header>
     ${update}${card}
     <div class="list-tools">${S.sort !== 'newest' ? `<span class="muted small">${sortLabel}</span>` : ''}${S.cat ? `<span class="chip on">${h(catName.get(S.cat) ?? '')}<button class="chip-x" data-clearcat aria-label="Clear category">${ICON.x}</button></span>` : ''}<span class="push"></span>${items.length && !S.selecting ? '<button class="link muted" data-select>Select</button>' : ''}<button class="icon-btn${S.cat || S.sort !== 'newest' ? ' active' : ''}" data-sort aria-label="Sort and filter" title="Sort and filter">${ICON.filter}</button></div>

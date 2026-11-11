@@ -6,13 +6,11 @@ export const today = (d = new Date()): string => `${d.getFullYear()}-${String(d.
 export const escapeHTML = (s: string): string =>
   s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]!));
 
-export type ListKind = 'curiosity' | 'wondering';
-
 /**
- * Home greeting pool (Bible › Screens and navigation, decided Nov 11, 2026):
- * any time + the line for this time of day + the line for this list. One per open, never the same twice in a row.
+ * Home greeting pool (Bible › Screens and navigation): any time + the line for this time of day.
+ * One per open, the same on both lists, never the same twice in a row.
  */
-export function greetingPool(name: string, list: ListKind, d = new Date()): string[] {
+export function greetingPool(name: string, d = new Date()): string[] {
   const who = name.trim() || 'Friend';
   const h = d.getHours();
   const day = d.toLocaleDateString('en-US', { weekday: 'long' });
@@ -21,15 +19,10 @@ export function greetingPool(name: string, list: ListKind, d = new Date()): stri
     : h < 12 ? `Morning thoughts, ${who}?`
     : h < 18 ? `Happy ${day}, ${who}.`
     : `Anything from today, ${who}?`;
-  return [
-    `What’s on your noggin, ${who}?`,
-    `Any thoughts, ${who}?`,
-    timeLine,
-    list === 'curiosity' ? `Any new ideas, ${who}?` : `What are you wondering, ${who}?`,
-  ];
+  return [`What’s on your noggin, ${who}?`, `Any thoughts, ${who}?`, timeLine];
 }
 
-export function pickGreeting(name: string, list: ListKind, last?: string, d = new Date()): string {
-  const pool = greetingPool(name, list, d).filter((g) => g !== last);
+export function pickGreeting(name: string, last?: string, d = new Date()): string {
+  const pool = greetingPool(name, d).filter((g) => g !== last);
   return pool[Math.floor(Math.random() * pool.length)];
 }
