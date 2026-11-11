@@ -15,6 +15,8 @@ type Sort = 'newest' | 'oldest' | 'category' | 'revisited';
 const S = {
   tab: 'curiosity' as ThoughtType,
   view: 'list' as View,
+  left: 'list' as Exclude<View, 'detail'>, // desktop: what the left column shows
+  openedId: '', // counts a revisit once per opening
   id: '',
   sort: 'newest' as Sort,
   cat: '' as string, // filter by category id
@@ -27,11 +29,14 @@ const S = {
 };
 
 let app: HTMLElement;
+const wideMQ = matchMedia('(min-width: 768px)');
+const wide = () => wideMQ.matches;
 const plural = (t: ThoughtType) => (t === 'curiosity' ? 'Curiosities' : 'Wonderings');
 
 export function startShell(root: HTMLElement): void {
   app = root;
-  app.innerHTML = `<div class="shell"><div id="view"></div></div><nav class="bottombar" id="bar" aria-label="Lists"></nav>`;
+  app.innerHTML = `<aside class="sidebar" id="side" aria-label="Noggin?"></aside><div class="shell"><div id="view"></div></div><nav class="bottombar" id="bar" aria-label="Lists"></nav>`;
+  wideMQ.addEventListener('change', () => { if (wide() && S.view === 'detail') S.view = S.left; void render(); });
   window.addEventListener('popstate', () => { S.view = (history.state?.view as View) ?? 'list'; S.id = history.state?.id ?? ''; void render(); });
   window.addEventListener('noggin:update-ready', () => void render());
   document.addEventListener('keydown', (e) => {
@@ -45,7 +50,9 @@ export function startShell(root: HTMLElement): void {
 }
 
 function go(view: View, id = ''): void {
-  S.view = view; S.id = id; S.selecting = false; S.picked.clear();
+  if (view === 'detail' && wide()) { S.id = id; void render(); return; } // desktop: details open in the right pane
+  if (view !== 'detail') { S.left = view; if (wide()) S.id = ''; }
+  S.view = view; S.id = id || (view === 'detail' ? id : S.id); S.selecting = false; S.picked.clear();
   if (view === 'list') history.replaceState(null, '');
   else history.pushState({ view, id }, '');
   window.scrollTo(0, 0);
@@ -54,7 +61,14 @@ function go(view: View, id = ''): void {
 const back = () => (history.state?.view ? history.back() : go('list'));
 const plus = () => void openCapture(S.view === 'list' ? S.tab : S.tab, (type) => { S.tab = type; if (S.view === 'list') void render(); });
 
-export async function render(): Promise<void> {
+// Renders run one after another, so a quick second tap never lands on a half-drawn screen.
+let queue: Promise<void> = Promise.resolve();
+export function render(): Promise<void> {
+  queue = queue.then(draw, draw);
+  return queue;
+}
+
+async function draw(): Promise<void> {
   const view = document.getElementById('view')!;
   const bar = document.getElementById('bar')!;
   bar.hidden = S.view !== 'list';
@@ -68,10 +82,53 @@ export async function render(): Promise<void> {
     const tb = t.closest<HTMLElement>('[data-tab]');
     if (tb) { S.tab = tb.dataset.tab as ThoughtType; S.cat = ''; S.selecting = false; S.picked.clear(); window.scrollTo(0, 0); void render(); }
   };
-  if (S.view === 'detail') return renderDetail(view, S.id, { back, refresh: () => void render() });
+  if (wide()) return renderWide(view);
+  if (S.view === 'detail') return detailInto(view, back);
   if (S.view === 'search') return renderSearch(view);
   if (S.view === 'archives') return renderArchives(view);
   return renderList(view);
+}
+
+function detailInto(el: HTMLElement, onBack: () => void): Promise<void> {
+  const first = S.openedId !== S.id; S.openedId = S.id;
+  return renderDetail(el, S.id, { back: onBack, refresh: () => void render() }, first);
+}
+
+// ── Desktop (768 px and up): sidebar, list on the left, details on the right ──
+async function renderWide(view: HTMLElement): Promise<void> {
+  const s = await getSettings();
+  const side = document.getElementById('side')!;
+  const left = S.view === 'detail' ? S.left : S.view;
+  const nav = (key: string, label: string, on: boolean, extra = '') => `<button class="side-item" data-side="${key}" ${on ? 'aria-current="page"' : ''} ${extra}>${label}</button>`;
+  side.innerHTML = `
+    <div class="wordmark side-mark">Noggin<span class="q">?</span></div>
+    <button class="btn side-new" data-plus>Catch a thought <kbd>N</kbd></button>
+    ${nav('curiosity', 'Curiosities', left === 'list' && S.tab === 'curiosity')}
+    ${nav('wondering', 'Wonderings', left === 'list' && S.tab === 'wondering')}
+    <div class="side-gap"></div>
+    ${nav('search', 'Search', left === 'search')}
+    ${nav('archives', 'Archives', left === 'archives')}
+    ${nav('analytics', 'Analytics <span class="muted small">Soon</span>', false, 'disabled')}
+    ${nav('settings', 'Settings <span class="muted small">Soon</span>', false, 'disabled')}
+    <div class="side-foot"><div class="seg" role="group" aria-label="Theme">${(['light', 'dark', 'system'] as Mode[]).map((m) => `<button type="button" data-setmode="${m}" aria-pressed="${s.mode === m}">${m[0].toUpperCase() + m.slice(1)}</button>`).join('')}</div></div>`;
+  side.onclick = async (e) => {
+    const t = e.target as HTMLElement;
+    if (t.closest('[data-plus]')) return plus();
+    const m = t.closest<HTMLElement>('[data-setmode]');
+    if (m) { applyLook(await updateSettings({ mode: m.dataset.setmode as Mode })); return void render(); }
+    const b = t.closest<HTMLElement>('[data-side]');
+    if (!b || b.hasAttribute('disabled')) return;
+    const k = b.dataset.side!;
+    if (k === 'curiosity' || k === 'wondering') { S.tab = k; S.cat = ''; return go('list'); }
+    if (k === 'search' || k === 'archives') return go(k);
+  };
+  view.innerHTML = `<div class="split"><div id="main"></div><div id="pane" aria-live="polite"></div></div>`;
+  const main = document.getElementById('main')!, pane = document.getElementById('pane')!;
+  if (left === 'search') await renderSearch(main);
+  else if (left === 'archives') await renderArchives(main);
+  else await renderList(main);
+  if (S.id) await detailInto(pane, () => { S.id = ''; void render(); });
+  else pane.innerHTML = '<p class="pane-hint">Pick a thought to explore it.</p>';
 }
 
 // ── Lists ──
@@ -93,7 +150,7 @@ async function renderList(view: HTMLElement): Promise<void> {
     const c = counts.get(t.id);
     const meta = [t.categoryId && catName.get(t.categoryId) ? h(catName.get(t.categoryId)!) : '', c?.total ? `${c.total} step${c.total > 1 ? 's' : ''}` : '', c?.inNudge ? `<span class="g">${c.inNudge} in Nudge</span>` : '', t.note && !c?.total ? 'has a note' : ''].filter(Boolean).join(' · ');
     const picked = S.picked.has(t.id);
-    return `<button class="row${S.selecting ? ' selecting' : ''}" data-open="${t.id}" ${S.selecting ? `aria-pressed="${picked}"` : ''}>${S.selecting ? `<span class="check${picked ? ' on' : ''}" aria-hidden="true">${picked ? '✓' : ''}</span>` : ''}<span class="row-body"><span class="row-text">${h(t.text)}</span>${meta ? `<span class="meta">${meta}</span>` : ''}</span></button>`;
+    return `<button class="row${S.selecting ? ' selecting' : ''}${wide() && S.id === t.id ? ' on' : ''}" data-open="${t.id}" ${S.selecting ? `aria-pressed="${picked}"` : ''}>${S.selecting ? `<span class="check${picked ? ' on' : ''}" aria-hidden="true">${picked ? '✓' : ''}</span>` : ''}<span class="row-body"><span class="row-text">${h(t.text)}</span>${meta ? `<span class="meta">${meta}</span>` : ''}</span></button>`;
   };
   let body: string;
   if (!items.length) {
@@ -163,14 +220,14 @@ async function openMenu(): Promise<void> {
       <button class="menu-item" disabled>Settings <span class="muted small">Soon</span></button>
     </div>
     <div class="label" style="margin:16px 0 8px">Theme</div>
-    <div class="seg" role="group" aria-label="Theme">${(['light', 'dark', 'system'] as Mode[]).map((m) => `<button type="button" data-mode="${m}" aria-pressed="${s.mode === m}">${m[0].toUpperCase() + m.slice(1)}</button>`).join('')}</div>`);
+    <div class="seg" role="group" aria-label="Theme">${(['light', 'dark', 'system'] as Mode[]).map((m) => `<button type="button" data-setmode="${m}" aria-pressed="${s.mode === m}">${m[0].toUpperCase() + m.slice(1)}</button>`).join('')}</div>`);
   sheet.el.addEventListener('click', async (e) => {
     const t = e.target as HTMLElement;
     if (t.closest('[data-go]')) { sheet.close(); return go('archives'); }
-    const m = t.closest<HTMLElement>('[data-mode]');
+    const m = t.closest<HTMLElement>('[data-setmode]');
     if (m) {
-      applyLook(await updateSettings({ mode: m.dataset.mode as Mode }));
-      sheet.el.querySelectorAll<HTMLElement>('[data-mode]').forEach((b) => b.setAttribute('aria-pressed', String(b === m)));
+      applyLook(await updateSettings({ mode: m.dataset.setmode as Mode }));
+      sheet.el.querySelectorAll<HTMLElement>('[data-setmode]').forEach((b) => b.setAttribute('aria-pressed', String(b === m)));
     }
   });
 }
@@ -185,7 +242,7 @@ async function renderSearch(view: HTMLElement): Promise<void> {
     S.q = q.value;
     const r = await search(S.q);
     const mark = (s: string) => { const i = s.toLowerCase().indexOf(S.q.trim().toLowerCase()); return i < 0 || !S.q.trim() ? h(s) : `${h(s.slice(0, i))}<mark>${h(s.slice(i, i + S.q.trim().length))}</mark>${h(s.slice(i + S.q.trim().length))}`; };
-    const grp = (title: string, l: Thought[]) => l.length ? `<p class="group-h">${title}</p>${l.map((t) => `<button class="row" data-open="${t.id}"><span class="row-body"><span class="row-text">${mark(t.text)}</span></span></button>`).join('')}` : '';
+    const grp = (title: string, l: Thought[]) => l.length ? `<p class="group-h">${title}</p>${l.map((t) => `<button class="row${wide() && S.id === t.id ? ' on' : ''}" data-open="${t.id}"><span class="row-body"><span class="row-text">${mark(t.text)}</span></span></button>`).join('')}` : '';
     const n = r.curiosity.length + r.wondering.length + r.archived.length;
     view.querySelector('#results')!.innerHTML = !S.q.trim() ? '<p class="empty">Search ideas, questions, notes and steps.</p>'
       : n ? grp('Curiosities', r.curiosity) + grp('Wonderings', r.wondering) + grp('Archived', r.archived) : `<p class="empty">Nothing matches “${h(S.q.trim())}”.</p>`;

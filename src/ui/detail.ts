@@ -22,7 +22,7 @@ export async function renderDetail(view: HTMLElement, id: string, nav: { back: (
   const drafts = steps.filter((s) => s.state === 'draft' && s.text.trim()).length;
 
   view.innerHTML = `
-    <div class="sub-top"><button class="back" data-back>${ICON.back}<span>Back</span></button></div>
+    <div class="sub-top detail-top"><button class="back" data-back>${ICON.back}<span>Back</span></button></div>
     <div class="tabs" role="tablist" aria-label="Type">
       <button role="tab" data-type="curiosity" aria-selected="${t.type === 'curiosity'}">Curiosity</button>
       <button role="tab" data-type="wondering" aria-selected="${t.type === 'wondering'}">Wondering</button>
@@ -44,7 +44,7 @@ export async function renderDetail(view: HTMLElement, id: string, nav: { back: (
   const note = view.querySelector<HTMLTextAreaElement>('#dNote')!;
   autogrow(text); autogrow(note);
   text.addEventListener('input', () => { autogrow(text); void updateThought(id, { text: text.value }); });
-  text.addEventListener('change', () => { if (!text.value.trim()) { text.value = t.text; void updateThought(id, { text: t.text }); } });
+  text.addEventListener('change', async () => { if (!text.value.trim()) { text.value = t.text; await updateThought(id, { text: t.text }); } if (matchMedia('(min-width: 768px)').matches) nav.refresh(); });
   text.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); text.blur(); } });
   note.addEventListener('input', () => { autogrow(note); void updateThought(id, { note: note.value || undefined }); });
 
