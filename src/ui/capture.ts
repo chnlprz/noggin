@@ -23,7 +23,7 @@ export async function openCapture(start: ThoughtType, onSaved: (type: ThoughtTyp
     <div class="label" style="margin:14px 0 8px" id="capCatL">Category <span class="opt">optional</span></div>
     <div class="chips" id="capCats" role="group" aria-labelledby="capCatL"></div>
     <p class="hint" id="capHint"></p>
-    <div class="cap-row"><label class="switch-row"><span>Keep adding</span><input type="checkbox" role="switch" id="capKeep"></label><button class="link" type="button" id="capMode"></button></div>
+    <div class="cap-row"><label class="switch-row"><span>Keep adding</span><input type="checkbox" role="switch" id="capKeep"></label><div class="seg mini" role="group" aria-label="How many"><button type="button" data-capmode="one">One</button><button type="button" data-capmode="many">Several</button></div></div>
     <button class="btn" type="button" id="capSave"></button>`, () => void saveDraft());
   const el = sheet.el;
   const ta = el.querySelector<HTMLTextAreaElement>('#capText')!;
@@ -38,7 +38,10 @@ export async function openCapture(start: ThoughtType, onSaved: (type: ThoughtTyp
     el.querySelector('#capCats')!.innerHTML = cats.map((c: Category) => `<button type="button" class="chip" data-cat="${c.id}" aria-pressed="${c.id === catId}">${h(c.name)}</button>`).join('');
     el.querySelector('#capHint')!.textContent = suggested && !manual && catId ? 'Suggested from your words.' : '';
     el.querySelector<HTMLInputElement>('#capKeep')!.checked = keep;
-    el.querySelector('#capMode')!.textContent = batch ? 'One thought' : 'One per line';
+    el.querySelectorAll<HTMLElement>('[data-capmode]').forEach((b) => b.setAttribute('aria-pressed', String((b.dataset.capmode === 'many') === batch)));
+    const split = el.querySelector<HTMLElement>('#capSplit')!;
+    if (batch) { split.hidden = false; split.textContent = 'Each line becomes its own thought.'; }
+    else if (!split.querySelector('[data-split]')) split.hidden = true;
     const n = lines().length;
     el.querySelector('#capSave')!.textContent = batch ? `Save ${n || ''} thought${n === 1 ? '' : 's'}`.replace('  ', ' ') : `Save to ${label(type)}`;
     autogrow(ta);
@@ -60,7 +63,8 @@ export async function openCapture(start: ThoughtType, onSaved: (type: ThoughtTyp
     if (tb) { type = tb.dataset.type as ThoughtType; draw(); return ta.focus(); }
     const cb = t.closest<HTMLButtonElement>('[data-cat]');
     if (cb) { manual = true; catId = catId === cb.dataset.cat ? undefined : cb.dataset.cat; draw(); return; }
-    if (t.closest('#capMode')) { batch = !batch; suggest(); draw(); return ta.focus(); }
+    const cm = t.closest<HTMLElement>('[data-capmode]');
+    if (cm) { batch = cm.dataset.capmode === 'many'; suggest(); draw(); return ta.focus(); }
     if (t.closest('[data-split]')) {
       const yes = (t.closest('[data-split]') as HTMLElement).dataset.split === 'yes';
       if (yes) { batch = true; suggest(); } else ta.value = ta.value.replace(/\s*\n\s*/g, ' ');
