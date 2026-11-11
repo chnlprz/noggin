@@ -1,6 +1,6 @@
 {
   "name": "noggin",
-  "version": "1.0.0-phase3",
+  "version": "1.0.0-phase4",
   "description": "Noggin? · Stay curious. An idea bank PWA by Innova Space.",
   "scripts": {
     "dev": "vite",

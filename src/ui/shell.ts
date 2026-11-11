@@ -6,12 +6,13 @@ import { applyUpdate } from '../lib/sw';
 import { pickGreeting } from '../lib/util';
 import { archive, categories, listThoughts, restore, search, softDelete, stepCounts, unarchive } from '../logic/thoughts';
 import { openCapture } from './capture';
+import { renderAnalytics } from './analytics';
 import { dismissStillCurious, stillCurious } from '../logic/resurface';
 import { currentNotice, hideNotice, homeScreenSteps } from '../logic/notices';
 import { renderDetail } from './detail';
 import { h, ICON, openSheet, toast } from './kit';
 
-type View = 'list' | 'detail' | 'search' | 'archives';
+type View = 'list' | 'detail' | 'search' | 'archives' | 'analytics';
 type Sort = 'newest' | 'oldest' | 'category' | 'revisited';
 
 const S = {
@@ -94,6 +95,7 @@ async function draw(): Promise<void> {
   if (S.view === 'detail') return detailInto(view, back);
   if (S.view === 'search') return renderSearch(view);
   if (S.view === 'archives') return renderArchives(view);
+  if (S.view === 'analytics') return renderAnalytics(view, { back, open: (id) => go('detail', id) });
   return renderList(view);
 }
 
@@ -116,7 +118,7 @@ async function renderWide(view: HTMLElement): Promise<void> {
     <div class="side-gap"></div>
     ${nav('search', 'Search', left === 'search')}
     ${nav('archives', 'Archives', left === 'archives')}
-    ${nav('analytics', 'Analytics <span class="muted small">Soon</span>', false, 'disabled')}
+    ${nav('analytics', 'Analytics', left === 'analytics')}
     ${nav('settings', 'Settings <span class="muted small">Soon</span>', false, 'disabled')}
     <div class="side-foot"><div class="seg" role="group" aria-label="Theme">${(['light', 'dark', 'system'] as Mode[]).map((m) => `<button type="button" data-setmode="${m}" aria-pressed="${s.mode === m}">${m[0].toUpperCase() + m.slice(1)}</button>`).join('')}</div></div>`;
   side.onclick = async (e) => {
@@ -128,12 +130,13 @@ async function renderWide(view: HTMLElement): Promise<void> {
     if (!b || b.hasAttribute('disabled')) return;
     const k = b.dataset.side!;
     if (k === 'curiosity' || k === 'wondering') { S.tab = k; S.cat = ''; return go('list'); }
-    if (k === 'search' || k === 'archives') return go(k);
+    if (k === 'search' || k === 'archives' || k === 'analytics') return go(k);
   };
   view.innerHTML = `<div class="split"><div id="main"></div><div id="pane" aria-live="polite"></div></div>`;
   const main = document.getElementById('main')!, pane = document.getElementById('pane')!;
   if (left === 'search') await renderSearch(main);
   else if (left === 'archives') await renderArchives(main);
+  else if (left === 'analytics') await renderAnalytics(main, { back, open: (id) => go('detail', id) });
   else await renderList(main);
   if (S.id) await detailInto(pane, () => { S.id = ''; void render(); });
   else pane.innerHTML = '<p class="pane-hint">Pick a thought to explore it.</p>';
@@ -302,14 +305,15 @@ async function openMenu(): Promise<void> {
   const sheet = openSheet(`
     <div class="menu">
       <button class="menu-item" data-go="archives">Archives ${ICON.chev}</button>
-      <button class="menu-item" disabled>Analytics <span class="muted small">Soon</span></button>
+      <button class="menu-item" data-go="analytics">Analytics ${ICON.chev}</button>
       <button class="menu-item" disabled>Settings <span class="muted small">Soon</span></button>
     </div>
     <div class="label" style="margin:16px 0 8px">Theme</div>
     <div class="seg" role="group" aria-label="Theme">${(['light', 'dark', 'system'] as Mode[]).map((m) => `<button type="button" data-setmode="${m}" aria-pressed="${s.mode === m}">${m[0].toUpperCase() + m.slice(1)}</button>`).join('')}</div>`);
   sheet.el.addEventListener('click', async (e) => {
     const t = e.target as HTMLElement;
-    if (t.closest('[data-go]')) { sheet.close(); return go('archives'); }
+    const g = t.closest<HTMLElement>('[data-go]');
+    if (g) { sheet.close(); return go(g.dataset.go as View); }
     const m = t.closest<HTMLElement>('[data-setmode]');
     if (m) {
       applyLook(await updateSettings({ mode: m.dataset.setmode as Mode }));
