@@ -217,3 +217,47 @@ kbd { font: 600 11px var(--sans); opacity: .6; margin-left: 8px; }
 .an-row:first-of-type { border-top: 0; padding-top: 2px; }
 .an-row > span:first-child { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 @media (min-width: 768px) { .an-title { display: block; } }
+
+/* Phase 5: Welcome, Thoughts rising */
+.wm-in { animation: fadeup .6s var(--ease-out) both; }
+.tag-in { animation: fadeup .5s var(--ease-out) .5s both; }
+.wiggle { display: inline-block; transform-origin: 50% 85%; animation: wiggle .8s ease-in-out .55s both; }
+@keyframes wiggle { 0% { transform: rotate(0); } 20% { transform: rotate(-12deg); } 40% { transform: rotate(10deg); } 60% { transform: rotate(-7deg); } 80% { transform: rotate(4deg); } 100% { transform: rotate(0); } }
+.q-brand { color: var(--brand-q); }
+.rising { position: fixed; inset: 0; overflow: hidden; background: var(--paper); }
+.rising .sky { position: absolute; left: 0; right: 0; top: 0; height: 62%; max-width: 440px; margin: 0 auto; }
+.rising .sky, .rising .wel { transition: opacity .55s ease, transform .65s cubic-bezier(.5, 0, .75, 0); }
+.rising .wel { position: absolute; left: 0; right: 0; top: 66%; text-align: center; animation: fadeup .5s var(--ease-out) 1.3s both; }
+.rising .wel h1 { margin: 0; font-size: calc(34px * var(--text-scale)); }
+.rising .wel p { margin: 8px 0 0; }
+.rising.leaving .sky { opacity: 0; transform: translateY(-140px); }
+.rising.leaving .wel { opacity: 0; transform: translateY(-24px); }
+.ft { position: absolute; opacity: 0; font-style: normal; animation: emerge 1.1s cubic-bezier(.2, .8, .25, 1) forwards, bob 3.2s ease-in-out infinite; animation-delay: var(--d), calc(var(--d) + 1.1s); }
+.ft svg { width: 100%; height: auto; display: block; }
+.ft.fdot { border-radius: 50%; background: color-mix(in srgb, var(--brand-q) 70%, var(--paper)); }
+@keyframes emerge { 0% { opacity: 0; transform: translate(var(--fx), var(--fy)) scale(.25); } 60% { opacity: 1; } 100% { opacity: 1; transform: none; } }
+@keyframes bob { 0%, 100% { translate: 0 0; } 50% { translate: 0 -5px; } }
+.rising .wel:only-child { top: 42%; animation-delay: 0s; }
+
+/* Settings */
+.set-h { margin: 22px 0 8px; font-size: 11px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+.set-group { background: var(--card); border: 1px solid var(--rule); border-radius: var(--r-md); overflow: hidden; }
+.set-group + .set-group { margin-top: 10px; }
+.set-row { display: flex; justify-content: space-between; align-items: center; gap: 12px; width: 100%; min-height: 50px; padding: 10px 14px; border: 0; border-top: 1px solid var(--rule); background: none; color: var(--ink); text-align: left; font-size: calc(15px * var(--text-scale)); text-decoration: none; }
+.set-group > .set-row:first-child, .set-group > :first-child { border-top: 0; }
+.set-row.col { flex-direction: column; align-items: stretch; gap: 8px; }
+.set-row.off { color: var(--muted); }
+.set-row .ic { width: 16px; height: 16px; display: inline-block; vertical-align: -3px; color: var(--muted); }
+.set-row input[type="color"] { width: 44px; height: 32px; border: 1px solid var(--rule); border-radius: 8px; background: var(--paper); padding: 2px; }
+.set-row input[type="range"] { width: 100%; accent-color: var(--accent); }
+.range-l { display: flex; justify-content: space-between; font-size: 11px; color: var(--muted); }
+.set-note { padding: 0 14px 12px; margin: -4px 0 0; }
+.sw { appearance: none; flex: none; width: 46px; height: 28px; border-radius: 999px; background: var(--soft); border: 1px solid var(--rule); position: relative; margin: 0; cursor: pointer; }
+.sw::after { content: ""; position: absolute; top: 3px; left: 3px; width: 20px; height: 20px; border-radius: 50%; background: var(--muted); transition: transform .18s ease; }
+.sw:checked { background: var(--accent); border-color: transparent; }
+.sw:checked::after { transform: translateX(18px); background: var(--on-accent); }
+.sw:disabled { opacity: .5; }
+.cat-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 10px; }
+.cat-row { display: flex; align-items: center; gap: 8px; }
+.cat-row .small { flex: none; width: 52px; text-align: center; }
+.news ul { padding-left: 18px; margin: 4px 0 10px; line-height: 1.6; }

@@ -3,7 +3,7 @@
 import { db } from '../db/db';
 import { isInstalled, isIOS } from '../lib/storage';
 
-export type Notice = { id: 'update' | 'a2hs'; text: string; action?: string };
+export type Notice = { id: 'update' | 'a2hs' | 'backup'; text: string; action?: string };
 
 const DAY = 864e5;
 const isPhone = () => /iphone|ipad|ipod|android/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
@@ -17,11 +17,18 @@ export async function currentNotice(): Promise<Notice | null> {
     // From day 3, then again a week after each ×.
     if (since >= 3 * DAY && hidden >= 7 * DAY) return { id: 'a2hs', text: 'Add Noggin? to your Home Screen so your thoughts stay safe.', action: 'How' };
   }
+  // 3 Backup reminder: 10+ thoughts and no backup in 14 days (× hides it for a week).
+  const meta = await db.meta.get('meta');
+  const count = await db.thoughts.count();
+  const lastB = meta?.lastBackupAt ? Date.now() - Date.parse(meta.lastBackupAt) : Infinity;
+  const hiddenB = meta?.backupHiddenAt ? Date.now() - Date.parse(meta.backupHiddenAt) : Infinity;
+  if (count >= 10 && lastB >= 14 * DAY && hiddenB >= 7 * DAY) return { id: 'backup', text: 'Back up your thoughts? It takes a second.', action: 'Back up' };
   return null;
 }
 
 export async function hideNotice(id: Notice['id']): Promise<void> {
   if (id === 'a2hs') await db.meta.update('meta', { a2hsHiddenAt: new Date().toISOString() });
+  if (id === 'backup') await db.meta.update('meta', { backupHiddenAt: new Date().toISOString() });
 }
 
 export function homeScreenSteps(): string {

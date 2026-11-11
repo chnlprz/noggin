@@ -26,7 +26,8 @@ export default defineConfig({
       workbox: {
         navigateFallbackDenylist: [/^\/api\//],
         globPatterns: ['**/*.{js,css,html,svg,png,woff2}'],
-        globIgnores: ['**/og-image.png'],
+        globIgnores: ['**/og-image.png', '**/AtkinsonHyperlegible-*.woff2'],
+        runtimeCaching: [{ urlPattern: /\/fonts\/AtkinsonHyperlegible-.*\.woff2$/, handler: 'CacheFirst', options: { cacheName: 'noggin-fonts-on-demand' } }],
       },
     }),
   ],

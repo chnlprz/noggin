@@ -7,12 +7,14 @@ import { pickGreeting } from '../lib/util';
 import { archive, categories, listThoughts, restore, search, softDelete, stepCounts, unarchive } from '../logic/thoughts';
 import { openCapture } from './capture';
 import { renderAnalytics } from './analytics';
+import { renderSettings } from './settings';
+import { downloadBackup } from '../db/backup';
 import { dismissStillCurious, stillCurious } from '../logic/resurface';
 import { currentNotice, hideNotice, homeScreenSteps } from '../logic/notices';
 import { renderDetail } from './detail';
 import { h, ICON, openSheet, toast } from './kit';
 
-type View = 'list' | 'detail' | 'search' | 'archives' | 'analytics';
+type View = 'list' | 'detail' | 'search' | 'archives' | 'analytics' | 'settings';
 type Sort = 'newest' | 'oldest' | 'category' | 'revisited';
 
 const S = {
@@ -96,7 +98,12 @@ async function draw(): Promise<void> {
   if (S.view === 'search') return renderSearch(view);
   if (S.view === 'archives') return renderArchives(view);
   if (S.view === 'analytics') return renderAnalytics(view, { back, open: (id) => go('detail', id) });
+  if (S.view === 'settings') return renderSettings(view, settingsNav(false));
   return renderList(view);
+}
+
+function settingsNav(isWide: boolean) {
+  return { back, go: (v: 'archives' | 'analytics') => go(v), wide: isWide, refresh: () => { S.greet = ''; if (isWide) void render(); } };
 }
 
 function detailInto(el: HTMLElement, onBack: () => void): Promise<void> {
@@ -119,24 +126,25 @@ async function renderWide(view: HTMLElement): Promise<void> {
     ${nav('search', 'Search', left === 'search')}
     ${nav('archives', 'Archives', left === 'archives')}
     ${nav('analytics', 'Analytics', left === 'analytics')}
-    ${nav('settings', 'Settings <span class="muted small">Soon</span>', false, 'disabled')}
+    ${nav('settings', 'Settings', left === 'settings')}
     <div class="side-foot"><div class="seg" role="group" aria-label="Theme">${(['light', 'dark', 'system'] as Mode[]).map((m) => `<button type="button" data-setmode="${m}" aria-pressed="${s.mode === m}">${m[0].toUpperCase() + m.slice(1)}</button>`).join('')}</div></div>`;
   side.onclick = async (e) => {
     const t = e.target as HTMLElement;
     if (t.closest('[data-plus]')) return plus();
     const m = t.closest<HTMLElement>('[data-setmode]');
-    if (m) { applyLook(await updateSettings({ mode: m.dataset.setmode as Mode })); return void render(); }
+    if (m) { applyLook(await updateSettings({ mode: m.dataset.setmode as Mode, custom: undefined })); return void render(); }
     const b = t.closest<HTMLElement>('[data-side]');
     if (!b || b.hasAttribute('disabled')) return;
     const k = b.dataset.side!;
     if (k === 'curiosity' || k === 'wondering') { S.tab = k; S.cat = ''; return go('list'); }
-    if (k === 'search' || k === 'archives' || k === 'analytics') return go(k);
+    if (k === 'search' || k === 'archives' || k === 'analytics' || k === 'settings') return go(k);
   };
   view.innerHTML = `<div class="split"><div id="main"></div><div id="pane" aria-live="polite"></div></div>`;
   const main = document.getElementById('main')!, pane = document.getElementById('pane')!;
   if (left === 'search') await renderSearch(main);
   else if (left === 'archives') await renderArchives(main);
   else if (left === 'analytics') await renderAnalytics(main, { back, open: (id) => go('detail', id) });
+  else if (left === 'settings') await renderSettings(main, settingsNav(true));
   else await renderList(main);
   if (S.id) await detailInto(pane, () => { S.id = ''; void render(); });
   else pane.innerHTML = '<p class="pane-hint">Pick a thought to explore it.</p>';
@@ -181,7 +189,7 @@ async function renderList(view: HTMLElement): Promise<void> {
 
   view.innerHTML = `
     <header class="topbar"><h1 class="greet serif">${h(S.greet)}</h1>
-      <div class="top-icons"><button class="icon-btn" data-search aria-label="Search">${ICON.search}</button><button class="icon-btn" data-menu aria-label="Menu">${ICON.menu}</button></div></header>
+      <div class="top-icons"><button class="icon-btn" data-search aria-label="Search">${ICON.search}</button><button class="icon-btn" data-menu aria-label="Settings" title="Settings">${ICON.menu}</button></div></header>
     ${update}${card}
     <div class="list-tools">${S.sort !== 'newest' ? `<span class="muted small">${sortLabel}</span>` : ''}${S.cat ? `<span class="chip on">${h(catName.get(S.cat) ?? '')}<button class="chip-x" data-clearcat aria-label="Clear category">${ICON.x}</button></span>` : ''}<span class="push"></span>${items.length && !S.selecting ? '<button class="link muted" data-select>Select</button>' : ''}<button class="icon-btn${S.cat || S.sort !== 'newest' ? ' active' : ''}" data-sort aria-label="Sort and filter" title="Sort and filter">${ICON.filter}</button></div>
     <div class="list${rise ? ' rise' : ''}">${body}</div>
@@ -209,14 +217,15 @@ async function renderList(view: HTMLElement): Promise<void> {
       return go('detail', row.dataset.open);
     }
     if (t.closest('[data-search]')) return go('search');
-    if (t.closest('[data-menu]')) return openMenu();
+    if (t.closest('[data-menu]')) return go('settings');
     if (t.closest('[data-sort]')) return openSort(cats);
     if (t.closest('[data-clearcat]')) { S.cat = ''; return renderList(view); }
     const nb = t.closest<HTMLElement>('[data-notice]');
     if (nb?.dataset.notice === 'update') return applyUpdate();
+    if (nb?.dataset.notice === 'backup') { await downloadBackup(); toast('Backup saved to your downloads'); return void render(); }
     if (nb?.dataset.notice === 'a2hs') return void openSheet(`<div class="sheet-head"><h2 class="serif">Add to Home Screen</h2></div>${homeScreenSteps()}`);
     const hb = t.closest<HTMLElement>('[data-hide]');
-    if (hb) { await hideNotice(hb.dataset.hide as 'a2hs'); return void render(); }
+    if (hb) { await hideNotice(hb.dataset.hide as 'a2hs' | 'backup'); return void render(); }
     const scb = t.closest<HTMLElement>('[data-sc]');
     if (scb) {
       const id = scb.dataset.id!, act = scb.dataset.sc;
@@ -297,28 +306,6 @@ function openSort(cats: Category[]): void {
     if (v) { S.sort = v.dataset.v as Sort; sheet.close(); return void render(); }
     const c = t.closest<HTMLElement>('[data-cat]');
     if (c) { S.cat = S.cat === c.dataset.cat ? '' : c.dataset.cat!; sheet.close(); return void render(); }
-  });
-}
-
-async function openMenu(): Promise<void> {
-  const s = await getSettings();
-  const sheet = openSheet(`
-    <div class="menu">
-      <button class="menu-item" data-go="archives">Archives ${ICON.chev}</button>
-      <button class="menu-item" data-go="analytics">Analytics ${ICON.chev}</button>
-      <button class="menu-item" disabled>Settings <span class="muted small">Soon</span></button>
-    </div>
-    <div class="label" style="margin:16px 0 8px">Theme</div>
-    <div class="seg" role="group" aria-label="Theme">${(['light', 'dark', 'system'] as Mode[]).map((m) => `<button type="button" data-setmode="${m}" aria-pressed="${s.mode === m}">${m[0].toUpperCase() + m.slice(1)}</button>`).join('')}</div>`);
-  sheet.el.addEventListener('click', async (e) => {
-    const t = e.target as HTMLElement;
-    const g = t.closest<HTMLElement>('[data-go]');
-    if (g) { sheet.close(); return go(g.dataset.go as View); }
-    const m = t.closest<HTMLElement>('[data-setmode]');
-    if (m) {
-      applyLook(await updateSettings({ mode: m.dataset.setmode as Mode }));
-      sheet.el.querySelectorAll<HTMLElement>('[data-setmode]').forEach((b) => b.setAttribute('aria-pressed', String(b === m)));
-    }
   });
 }
 

@@ -4,7 +4,7 @@ export { escapeHTML as h } from '../lib/util';
 const svg = (d: string, extra = '') => `<svg class="ic" viewBox="0 0 24 24" aria-hidden="true" ${extra}>${d}</svg>`;
 export const ICON = {
   search: svg('<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>'),
-  menu: svg('<path d="M4 7h16M4 12h16M4 17h10"/>'),
+  menu: svg('<path d="M4 7h16M4 12h16M4 17h16"/>'), // same as Nudge!'s Settings icon
   plus: svg('<path d="M12 5v14M5 12h14"/>'),
   x: svg('<path d="M6 6l12 12M18 6 6 18"/>'),
   back: svg('<path d="M15 18l-6-6 6-6"/>'),

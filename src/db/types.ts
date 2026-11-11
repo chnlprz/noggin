@@ -80,4 +80,7 @@ export interface Meta {
   captureDraft?: string;
   stillCurious?: { day: string; id?: string; done?: boolean }; // today's pick (Bible › Still curious?)
   a2hsHiddenAt?: ISOTime; // Add to Home Screen notice hidden with ×
+  lastBackupAt?: ISOTime;
+  backupHiddenAt?: ISOTime;
+  welcomed?: boolean; // Thoughts rising played once
 }
