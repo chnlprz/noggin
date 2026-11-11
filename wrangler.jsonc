@@ -13,5 +13,10 @@
     "binding": "ASSETS",
     "not_found_handling": "single-page-application",
     "run_worker_first": ["/api/*"]
-  }
+  },
+  // Shared Innova Space accounts live in Nudge!'s D1 database; Noggin? keeps its rows in its own tables there.
+  "d1_databases": [
+    { "binding": "DB", "database_name": "nudge", "database_id": "2a303c20-837b-41ca-a7d1-c759772d1aa4" }
+  ],
+  "vars": { "RP_ID": "innovaspace.app" }
 }

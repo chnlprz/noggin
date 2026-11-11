@@ -6,6 +6,7 @@ import { applyLook, contrast, customPalette } from '../lib/look';
 import { nowISO, uid } from '../lib/util';
 import { restore } from '../logic/thoughts';
 import { h, ICON, openSheet, toast } from './kit';
+import { cloud, createPasskey, friendlyError, passkeysWork, signInWithPasskey, signOut, syncNow } from '../lib/cloud';
 
 export const VERSION = '1.0.0';
 const SIZES = [0.9, 1, 1.12, 1.25];
@@ -50,7 +51,7 @@ export async function renderSettings(view: HTMLElement, nav: Nav): Promise<void>
 
     <p class="set-h">Still curious?</p>
     <div class="set-group">${sw('stillCurious', s.stillCurious, 'Show one old thought a day')}
-      <label class="set-row off"><span>Weekly notification <span class="muted small">· needs sign-in, coming soon</span></span><input type="checkbox" role="switch" class="sw" disabled></label></div>
+      <label class="set-row off"><span>Weekly notification <span class="muted small">· coming soon</span></span><input type="checkbox" role="switch" class="sw" disabled></label></div>
 
     <p class="set-h">Nudge!</p>
     <div class="set-group">${sw('sendToNudge', s.sendToNudge, 'Send steps to Nudge!')}
@@ -58,8 +59,7 @@ export async function renderSettings(view: HTMLElement, nav: Nav): Promise<void>
       <a class="set-row" href="https://nudge.innovaspace.app" target="_blank" rel="noopener"><span>Open Nudge!</span><span class="muted small">${ICON.chev}</span></a></div>
 
     <p class="set-h">Account</p>
-    <div class="set-group"><div class="set-row off"><span>Sign in with a passkey</span><span class="muted small">Coming soon</span></div>
-      <p class="hint set-note">One passkey for every Innova Space app. Until then, everything stays on this device.</p></div>
+    <div class="set-group">${accountHTML()}</div>
 
     <p class="set-h">Your data</p>
     <div class="set-group">
@@ -115,7 +115,31 @@ export async function renderSettings(view: HTMLElement, nav: Nav): Promise<void>
     if (a === 'backup') { await downloadBackup(); toast('Backup saved to your downloads'); return void renderSettings(view, nav); }
     if (a === 'restore') return file.click();
     if (a === 'feedback') return openFeedback();
+    if (a === 'pk-new' || a === 'pk-add' || a === 'pk-in' || a === 'sync' || a === 'out') {
+      const btn = t.closest<HTMLButtonElement>('[data-act]')!; btn.disabled = true;
+      try {
+        if (a === 'pk-new' || a === 'pk-add') { await createPasskey(s.name); toast(a === 'pk-new' ? 'Signed in. Your thoughts will sync.' : 'Passkey added on this device'); }
+        if (a === 'pk-in') { const nm = await signInWithPasskey(); if (nm && !s.name) await updateSettings({ name: nm }); toast('Signed in. Your thoughts will sync.'); }
+        if (a === 'out') { await signOut(); toast('Signed out. Everything stays on this device.'); }
+        if (a !== 'out') { await syncNow(); const err = cloud.get().error; if (a === 'sync') toast(err ?? 'Synced'); }
+      } catch (err) { toast(friendlyError(err), undefined, 5000); }
+      nav.refresh(); return void renderSettings(view, nav);
+    }
   };
+}
+
+function accountHTML(): string {
+  const c = cloud.get();
+  if (!passkeysWork()) return '<div class="set-row off"><span>Sign in</span><span class="muted small">Not available in this browser</span></div><p class="hint set-note">Passkeys need Safari, Chrome or Edge. Everything still works on this device.</p>';
+  if (!c.signedIn) return `<button class="set-row" data-act="pk-new"><span>Create a passkey</span><span class="muted small">${ICON.chev}</span></button>
+    <button class="set-row" data-act="pk-in"><span>I already have one</span><span class="muted small">${ICON.chev}</span></button>
+    <p class="hint set-note">Face ID, Touch ID or your phone lock. No password, no email. One passkey for every Innova Space app, Nudge! too. Signing in syncs your thoughts between your devices.</p>`;
+  const last = c.lastSync ? new Date(c.lastSync).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : 'Not yet';
+  return `<div class="set-row"><span>Last synced</span><span class="muted small">${last}</span></div>
+    ${c.error ? `<p class="hint set-note">${h(c.error)}</p>` : ''}
+    <button class="set-row" data-act="sync"><span>Sync now</span><span class="muted small">${ICON.chev}</span></button>
+    <button class="set-row" data-act="pk-add"><span>Add a passkey on this device</span><span class="muted small">${ICON.chev}</span></button>
+    <button class="set-row" data-act="out"><span>Sign out</span><span class="muted small">Your thoughts stay here</span></button>`;
 }
 
 const NEWS = `<div class="news">

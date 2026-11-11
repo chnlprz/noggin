@@ -1,6 +1,6 @@
 {
   "name": "noggin",
-  "version": "1.0.0-phase5",
+  "version": "1.0.0-phase6",
   "description": "Noggin? · Stay curious. An idea bank PWA by Innova Space.",
   "scripts": {
     "dev": "vite",
@@ -18,12 +18,14 @@
   "type": "module",
   "devDependencies": {
     "@cloudflare/workers-types": "^5.20261110.1",
+    "@simplewebauthn/server": "^14.1.0",
     "typescript": "^5.9.3",
     "vite": "^6.4.6",
     "vite-plugin-pwa": "^0.21.2",
     "wrangler": "^4.160.1"
   },
   "dependencies": {
+    "@simplewebauthn/browser": "^14.0.0",
     "dexie": "^4.4.7"
   }
 }

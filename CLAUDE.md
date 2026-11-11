@@ -8,7 +8,7 @@ Idea bank PWA by Innova Space: Curiosities (ideas) and Wonderings (questions); s
 - **Nudge! Bible v2.0** and repo chnlprz/nudge: shared stack, rules and the other side of the handoff.
 
 ## Stack
-Vite + TypeScript (no framework), Dexie over IndexedDB (`src/db`), vite-plugin-pwa, Cloudflare Worker (`worker/index.ts`) + static assets from `dist/` (`wrangler.jsonc`), custom domain noggin.innovaspace.app.
+Vite + TypeScript (no framework), Dexie over IndexedDB (`src/db`), vite-plugin-pwa, Cloudflare Worker (`worker/index.ts`: /api passkeys + sync) + static assets from `dist/` (`wrangler.jsonc`), custom domain noggin.innovaspace.app. D1 binding `DB` = Nudge!'s `nudge` database: shared accounts (users, credentials, sessions, challenges); Noggin? rows only in `noggin_rows` / `noggin_rev` (never Nudge!'s `rows`, which Nudge! syncs whole). Session cookie `noggin_s`.
 
 ## Rules
 - Colours, sizes, radii only from `src/styles/tokens.css`. Serif via `var(--serif)`, never bold, `opsz 18`.
@@ -18,7 +18,7 @@ Vite + TypeScript (no framework), Dexie over IndexedDB (`src/db`), vite-plugin-p
 - Copy: gentle, never blames, says what didn't change on errors.
 
 ## Build phases (Bible › Build plan)
-1. Foundation ✅ · 2. Thoughts core ✅ · 3. Home extras ✅ · 4. Analytics ✅ · 5. Onboarding, Settings, backups, About ✅ · 6. Account + sync · 7. Handoff to Nudge! · 8. Desktop ✅ (built early, Nov 12)
+1. Foundation ✅ · 2. Thoughts core ✅ · 3. Home extras ✅ · 4. Analytics ✅ · 5. Onboarding, Settings, backups, About ✅ · 6. Account + sync ✅ · 7. Handoff to Nudge! · 8. Desktop ✅ (built early, Nov 12)
 
 ## Open issues
 - Dark mode shows horizontal bands only in Chrome on Chanel's Intel Mac (not iPad, phone, or Nudge!). A fixed solid `html::before` layer was tried (Nov 12); not yet confirmed fixed.

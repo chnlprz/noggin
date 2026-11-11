@@ -4,6 +4,7 @@ import { db, getSettings, updateSettings } from '../db/db';
 import { previewBackup, restoreBackup, RESTORE_REASONS } from '../db/backup';
 import { applyLook } from '../lib/look';
 import { h, openSheet, toast } from './kit';
+import { friendlyError, passkeysWork, signInWithPasskey, syncNow } from '../lib/cloud';
 
 const reduced = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
 
@@ -16,12 +17,23 @@ export function renderWelcome(app: HTMLElement, done: () => void): void {
       </div>
       <div style="display:flex;flex-direction:column;gap:10px">
         <button class="btn" id="start" type="button">Get started</button>
-        <button class="btn-secondary" id="restore" type="button">Restore from a backup</button>
+        ${passkeysWork() ? '<button class="btn-secondary" id="signin" type="button">I already use an Innova Space app</button>' : ''}
+        <button class="link muted" id="restore" type="button">Restore from a backup</button>
         <p class="muted" style="margin:6px 0 0;font-size:12px">No account needed. Everything stays on this device.</p>
         <input id="file" type="file" accept="application/json,.json" hidden>
       </div>
     </main>`;
   app.querySelector('#start')!.addEventListener('click', () => renderName(app, done));
+  app.querySelector('#signin')?.addEventListener('click', async (e) => {
+    const b = e.currentTarget as HTMLButtonElement; b.disabled = true;
+    try {
+      const name = await signInWithPasskey();
+      if (name) await updateSettings({ name });
+      await syncNow(); applyLook(await getSettings());
+      // Signed in with a Nudge! account: the name is already known, so straight to Thoughts rising.
+      if (name || (await getSettings()).name) playRising(app, done); else renderName(app, done);
+    } catch (err) { toast(friendlyError(err), undefined, 5000); b.disabled = false; }
+  });
   const file = app.querySelector<HTMLInputElement>('#file')!;
   app.querySelector('#restore')!.addEventListener('click', () => file.click());
   file.addEventListener('change', async () => {
