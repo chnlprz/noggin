@@ -88,7 +88,7 @@ export function suggestCategory(text: string, cats: Category[]): Category | unde
   let best: Category | undefined; let score = 0;
   for (const c of cats) {
     const words = [...(KEYWORDS[c.name] ?? []), c.name.toLowerCase()];
-    const s = words.reduce((n, w) => n + (t.includes(w) ? 1 : 0), 0);
+    const s = words.reduce((n, w) => n + (new RegExp(`\\b${w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`).test(t) ? 1 : 0), 0); // whole words: "notebook" is not "book"
     if (s > score) { score = s; best = c; }
   }
   return best;

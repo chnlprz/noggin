@@ -45,7 +45,6 @@ export async function renderDetail(view: HTMLElement, id: string, nav: { back: (
   autogrow(text); autogrow(note);
   text.addEventListener('input', () => { autogrow(text); void updateThought(id, { text: text.value }); });
   text.addEventListener('change', async () => { if (!text.value.trim()) { text.value = t.text; await updateThought(id, { text: t.text }); } if (matchMedia('(min-width: 768px)').matches) nav.refresh(); });
-  text.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); text.blur(); } });
   note.addEventListener('input', () => { autogrow(note); void updateThought(id, { note: note.value || undefined }); });
 
   view.querySelector('#dAdd')!.addEventListener('submit', async (e) => {

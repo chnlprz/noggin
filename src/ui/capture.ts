@@ -78,18 +78,20 @@ export async function openCapture(start: ThoughtType, onSaved: (type: ThoughtTyp
   ta.addEventListener('input', () => { suggest(); draw(); });
   ta.addEventListener('paste', () => setTimeout(() => {
     if (batch) return;
-    const n = lines().length;
-    if (n < 2) return;
+    const l = lines();
+    const n = l.length;
+    if (n < 3 || l.some((x) => x.length > 80)) return; // paragraphs stay one thought; only list-like pastes ask
     const p = el.querySelector<HTMLElement>('#capSplit')!;
     p.hidden = false;
     p.innerHTML = `Save as ${n} thoughts? <button class="link" type="button" data-split="yes">Split</button> · <button class="link" type="button" data-split="no">Keep as one</button>`;
   }));
+  // Enter is always a new line (a thought can have paragraphs). Cmd/Ctrl + Enter saves.
   ta.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter' && !batch && !e.shiftKey) { e.preventDefault(); void save(); }
+    if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); void save(); }
   });
 
   async function save() {
-    const texts = batch ? lines() : [ta.value.replace(/\s+/g, ' ').trim()].filter(Boolean);
+    const texts = batch ? lines() : [ta.value.replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim()].filter(Boolean);
     if (!texts.length) return ta.focus();
     await addThoughts(texts, type, catId);
     ta.value = ''; await db.meta.update('meta', { captureDraft: undefined });

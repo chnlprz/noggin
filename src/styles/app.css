@@ -159,3 +159,5 @@ kbd { font: 600 11px var(--sans); opacity: .6; margin-left: 8px; }
 .sw-btn.danger { background: var(--danger); color: var(--paper); }
 .row.swiped .row-text { -webkit-line-clamp: 1; }
 .seg.mini button { min-height: 30px; font-size: 12px; padding: 0 12px; flex: none; }
+/* A thought can have paragraphs: keep its line breaks in details and search, not in list rows */
+.title-edit { white-space: pre-wrap; }
