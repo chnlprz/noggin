@@ -43,7 +43,10 @@ export async function renderDetail(view: HTMLElement, id: string, nav: { back: (
   const text = view.querySelector<HTMLTextAreaElement>('#dText')!;
   const note = view.querySelector<HTMLTextAreaElement>('#dNote')!;
   autogrow(text); autogrow(note);
-  text.addEventListener('input', () => { autogrow(text); void updateThought(id, { text: text.value }); });
+  // Short thoughts read as a title (serif); long ones or ones with paragraphs switch to easy reading text.
+  const fit = () => { text.classList.toggle('long', text.value.length > 80 || text.value.includes('\n')); autogrow(text); };
+  fit();
+  text.addEventListener('input', () => { fit(); void updateThought(id, { text: text.value }); });
   text.addEventListener('change', async () => { if (!text.value.trim()) { text.value = t.text; await updateThought(id, { text: t.text }); } if (matchMedia('(min-width: 768px)').matches) nav.refresh(); });
   note.addEventListener('input', () => { autogrow(note); void updateThought(id, { note: note.value || undefined }); });
 

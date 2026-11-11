@@ -161,3 +161,4 @@ kbd { font: 600 11px var(--sans); opacity: .6; margin-left: 8px; }
 .seg.mini button { min-height: 30px; font-size: 12px; padding: 0 12px; flex: none; }
 /* A thought can have paragraphs: keep its line breaks in details and search, not in list rows */
 .title-edit { white-space: pre-wrap; }
+.title-edit.long { font-family: var(--sans); font-size: calc(16px * var(--text-scale)); line-height: 1.55; letter-spacing: 0; font-variation-settings: normal; }
