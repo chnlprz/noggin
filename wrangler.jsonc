@@ -18,5 +18,7 @@
   "d1_databases": [
     { "binding": "DB", "database_name": "nudge", "database_id": "2a303c20-837b-41ca-a7d1-c759772d1aa4" }
   ],
-  "vars": { "RP_ID": "innovaspace.app" }
+  // Feedback copies go to the Innova Space inbox (a verified destination in Email Routing for innovaspace.app).
+  "send_email": [{ "name": "FEEDBACK_MAIL", "destination_address": "hello.innovaspace@gmail.com" }],
+  "vars": { "RP_ID": "innovaspace.app", "FEEDBACK_FROM": "noggin@innovaspace.app", "FEEDBACK_TO": "hello.innovaspace@gmail.com" }
 }

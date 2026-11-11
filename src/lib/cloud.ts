@@ -44,6 +44,9 @@ export async function signOut(): Promise<void> {
   cloud.set({ signedIn: false });
 }
 
+/** Feedback goes to Innova Space (saved, then emailed). Works without signing in. */
+export const sendFeedback = (f: { kind: string; message: string; replyTo: string; info: string; version: string }) => call<{ ok: boolean }>('/feedback', f);
+
 export const passkeysWork = () => typeof window.PublicKeyCredential === 'function';
 export const friendlyError = (e: unknown): string => {
   const n = (e as Error)?.name, m = (e as Error)?.message;

@@ -5,11 +5,15 @@
 import {
   generateAuthenticationOptions, generateRegistrationOptions, verifyAuthenticationResponse, verifyRegistrationResponse,
 } from '@simplewebauthn/server';
+import { EmailMessage } from 'cloudflare:email';
 
 interface Env {
   ASSETS: Fetcher;
   DB: D1Database; // the shared `nudge` database
   RP_ID: string;
+  FEEDBACK_MAIL?: SendEmail;
+  FEEDBACK_FROM: string;
+  FEEDBACK_TO: string;
 }
 
 const COOKIE = 'noggin_s';
@@ -30,6 +34,7 @@ function schema(db: D1Database) {
     db.prepare('CREATE TABLE IF NOT EXISTS credentials (id TEXT PRIMARY KEY, user_id TEXT, public_key TEXT, counter INTEGER, transports TEXT, created_at INTEGER)'),
     db.prepare('CREATE TABLE IF NOT EXISTS sessions (token TEXT PRIMARY KEY, user_id TEXT, expires_at INTEGER)'),
     db.prepare('CREATE TABLE IF NOT EXISTS challenges (id TEXT PRIMARY KEY, challenge TEXT, user_id TEXT, expires_at INTEGER)'),
+    db.prepare('CREATE TABLE IF NOT EXISTS feedback (id TEXT PRIMARY KEY, created_at INTEGER, user_id TEXT, kind TEXT, message TEXT, reply_to TEXT, info TEXT, version TEXT, ip TEXT, mailed INTEGER DEFAULT 0)'),
     db.prepare('CREATE TABLE IF NOT EXISTS noggin_rev (user_id TEXT PRIMARY KEY, rev INTEGER DEFAULT 0)'),
     db.prepare('CREATE TABLE IF NOT EXISTS noggin_rows (user_id TEXT, tbl TEXT, id TEXT, data TEXT, rev INTEGER, PRIMARY KEY (user_id, tbl, id))'),
     db.prepare('CREATE INDEX IF NOT EXISTS noggin_rows_rev ON noggin_rows (user_id, rev)'),
@@ -57,6 +62,27 @@ async function takeChallenge(env: Env, id: string) {
 async function nudgeName(env: Env, uid: string): Promise<string> {
   const r = await env.DB.prepare("SELECT data FROM rows WHERE user_id = ? AND tbl = 'settings' LIMIT 1").bind(uid).first<{ data: string }>().catch(() => null);
   try { return String(JSON.parse(r?.data ?? '{}').name ?? '').slice(0, 32); } catch { return ''; }
+}
+
+async function sha(s: string): Promise<string> { // same as Nudge!'s, so the hourly limit is shared
+  return b64u.enc(new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(`nudge:${s}`)))).slice(0, 22);
+}
+const mimeWord = (s: string) => `=?UTF-8?B?${btoa(String.fromCharCode(...new TextEncoder().encode(s)))}?=`;
+/** Same as Nudge!'s: a copy goes to the Innova Space inbox; it's saved in D1 first either way. */
+async function mailFeedback(env: Env, f: { id: string; kind: string; message: string; replyTo: string; info: string; version: string; signedIn: boolean }): Promise<boolean> {
+  if (!env.FEEDBACK_MAIL) return false;
+  try {
+    const text = `${f.message}\n\n—\nKind: ${f.kind}\nVersion: Noggin? ${f.version || '?'} · ${f.signedIn ? 'signed in' : 'not signed in'}\nReply to: ${f.replyTo || 'not given'}\n${f.info ? `\n${f.info}\n` : ''}\nFeedback id: ${f.id}`;
+    const raw = [
+      `From: ${mimeWord('Noggin? feedback')} <${env.FEEDBACK_FROM}>`, `To: <${env.FEEDBACK_TO}>`,
+      ...(f.replyTo ? [`Reply-To: <${f.replyTo}>`] : []),
+      `Subject: ${mimeWord(`Noggin? ${f.version} · ${f.kind}`)}`, `Message-ID: <${f.id}@innovaspace.app>`, `Date: ${new Date().toUTCString()}`,
+      'MIME-Version: 1.0', 'Content-Type: text/plain; charset=utf-8', 'Content-Transfer-Encoding: base64', '',
+      btoa(String.fromCharCode(...new TextEncoder().encode(text))).replace(/.{76}/g, '$&\r\n'),
+    ].join('\r\n');
+    await env.FEEDBACK_MAIL.send(new EmailMessage(env.FEEDBACK_FROM, env.FEEDBACK_TO, raw));
+    return true;
+  } catch { return false; }
 }
 
 async function api(req: Request, env: Env, url: URL): Promise<Response> {
@@ -121,6 +147,21 @@ async function api(req: Request, env: Env, url: URL): Promise<Response> {
     return json({ ok: true }, { headers: { 'set-cookie': `${COOKIE}=; Path=/; Max-Age=0; HttpOnly; Secure; SameSite=Lax` } });
   }
   if (path === '/me') return json({ signedIn: !!uid, userId: uid });
+  // ── Feedback: the shared Innova Space feedback table (version says Noggin?), then a copy by email ──
+  if (path === '/feedback') {
+    const message = String(body.message ?? '').trim().slice(0, 4000);
+    if (!message) return oops(400, 'empty');
+    const ip = await sha(req.headers.get('cf-connecting-ip') ?? '');
+    const recent = (await env.DB.prepare('SELECT COUNT(*) AS n FROM feedback WHERE ip = ? AND created_at > ?').bind(ip, Date.now() - 3600e3).first<{ n: number }>())?.n ?? 0;
+    if (recent >= 10) return oops(429, 'slow-down');
+    const kind = String(body.kind ?? 'Other').slice(0, 40), info = String(body.info ?? '').slice(0, 1000), version = `Noggin? ${String(body.version ?? '').slice(0, 20)}`;
+    const replyTo = /^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+$/.test(String(body.replyTo ?? '').trim()) ? String(body.replyTo).trim().slice(0, 120) : '';
+    const id = rid();
+    await env.DB.prepare('INSERT INTO feedback (id, created_at, user_id, kind, message, reply_to, info, version, ip) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)').bind(id, Date.now(), uid, kind, message, replyTo, info, version, ip).run();
+    const mailed = await mailFeedback(env, { id, kind, message, replyTo, info, version: String(body.version ?? ''), signedIn: !!uid });
+    if (mailed) await env.DB.prepare('UPDATE feedback SET mailed = 1 WHERE id = ?').bind(id).run();
+    return json({ ok: true });
+  }
 
   if (!uid) return oops(401, 'signed-out');
 

@@ -7,7 +7,7 @@ import { pickGreeting } from '../lib/util';
 import { archive, categories, listThoughts, restore, search, softDelete, stepCounts, unarchive } from '../logic/thoughts';
 import { openCapture } from './capture';
 import { renderAnalytics } from './analytics';
-import { renderSettings } from './settings';
+import { renderSettings, resetSettingsPage } from './settings';
 import { downloadBackup } from '../db/backup';
 import { dismissStillCurious, stillCurious } from '../logic/resurface';
 import { currentNotice, hideNotice, homeScreenSteps } from '../logic/notices';
@@ -63,6 +63,7 @@ export function startShell(root: HTMLElement): void {
 function go(view: View, id = ''): void {
   if (view === 'detail' && wide()) { S.id = id; void render(); return; } // desktop: details open in the right pane
   if (view !== 'detail') { S.left = view; if (wide()) S.id = ''; }
+  if (view === 'settings') resetSettingsPage();
   S.view = view; S.id = id || (view === 'detail' ? id : S.id); S.selecting = false; S.picked.clear();
   if (view === 'list') history.replaceState(null, '');
   else history.pushState({ view, id }, '');
@@ -127,7 +128,7 @@ async function renderWide(view: HTMLElement): Promise<void> {
     ${nav('archives', 'Archives', left === 'archives')}
     ${nav('analytics', 'Analytics', left === 'analytics')}
     ${nav('settings', 'Settings', left === 'settings')}
-    <div class="side-foot"><div class="seg" role="group" aria-label="Theme">${(['light', 'dark', 'system'] as Mode[]).map((m) => `<button type="button" data-setmode="${m}" aria-pressed="${s.mode === m}">${m[0].toUpperCase() + m.slice(1)}</button>`).join('')}</div></div>`;
+    <div class="side-foot"><div class="seg" role="group" aria-label="Theme">${(['light', 'dark', 'system'] as Mode[]).map((m) => `<button type="button" data-setmode="${m}" aria-pressed="${!s.custom && s.mode === m}">${m === 'system' ? 'Auto' : m[0].toUpperCase() + m.slice(1)}</button>`).join('')}</div></div>`;
   side.onclick = async (e) => {
     const t = e.target as HTMLElement;
     if (t.closest('[data-plus]')) return plus();
