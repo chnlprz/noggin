@@ -36,3 +36,7 @@ button { cursor: pointer; touch-action: manipulation; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 1ms !important; animation-delay: 0s !important; transition-duration: 1ms !important; }
 }
+
+/* Chrome on some Macs (Intel graphics) draws a very dark page in tiles that come out in two shades,
+   showing as horizontal bands. One fixed, solid layer behind everything is drawn in one piece instead. */
+html::before { content: ""; position: fixed; inset: 0; z-index: -1; background: var(--paper); pointer-events: none; transform: translateZ(0); }
