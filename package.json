@@ -1,0 +1,29 @@
+{
+  "name": "noggin",
+  "version": "1.0.0-phase1",
+  "description": "Noggin? · Stay curious. An idea bank PWA by Innova Space.",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && tsc -p worker/tsconfig.json && vite build",
+    "preview": "vite preview",
+    "deploy": "npm run build && wrangler deploy"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/chnlprz/noggin.git"
+  },
+  "author": "Innova Space",
+  "license": "UNLICENSED",
+  "private": true,
+  "type": "module",
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20261110.1",
+    "typescript": "^5.9.3",
+    "vite": "^6.4.6",
+    "vite-plugin-pwa": "^0.21.2",
+    "wrangler": "^4.160.1"
+  },
+  "dependencies": {
+    "dexie": "^4.4.7"
+  }
+}

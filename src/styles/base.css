@@ -1,0 +1,38 @@
+*, *::before, *::after { box-sizing: border-box; min-width: 0; }
+html, body { margin: 0; padding: 0; }
+html { -webkit-text-size-adjust: 100%; -webkit-tap-highlight-color: transparent; }
+body {
+  background: var(--paper); color: var(--ink);
+  font: calc(15px * var(--text-scale)) / 1.45 var(--sans);
+  min-height: 100dvh; overscroll-behavior: none;
+}
+button, input, textarea, select { font: inherit; color: inherit; }
+button { cursor: pointer; touch-action: manipulation; }
+:focus-visible { outline: 2px solid var(--accent-text); outline-offset: 2px; }
+.serif { font-family: var(--serif); font-weight: 400; font-variation-settings: 'opsz' 18; letter-spacing: -0.015em; }
+.muted { color: var(--muted); }
+
+.screen {
+  max-width: 440px; margin: 0 auto; min-height: 100dvh; display: flex; flex-direction: column;
+  padding: calc(env(safe-area-inset-top) + var(--s6)) var(--s5) calc(env(safe-area-inset-bottom) + var(--s6));
+}
+.wordmark { font-family: var(--serif); font-weight: 400; font-variation-settings: 'opsz' 18; letter-spacing: -0.015em; line-height: 1; }
+.wordmark .q { color: var(--brand-q); }
+
+.btn {
+  display: flex; align-items: center; justify-content: center; width: 100%; min-height: var(--tap);
+  border-radius: var(--r-pill); border: 0; background: var(--accent); color: var(--on-accent); font-weight: 600;
+}
+.btn-secondary {
+  display: flex; align-items: center; justify-content: center; width: 100%; min-height: var(--tap);
+  border-radius: var(--r-pill); border: 1px solid var(--rule); background: transparent; color: var(--ink); font-weight: 600;
+}
+.card { background: var(--card); border: 1px solid var(--rule); border-radius: var(--r-md); padding: var(--s4); }
+.label { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; font-weight: 600; color: var(--muted); }
+.seg { display: flex; background: var(--soft); border-radius: var(--r-sm); padding: 2px; }
+.seg button { flex: 1; border: 0; background: none; border-radius: 8px; min-height: 36px; font-weight: 600; font-size: 13px; color: var(--muted); }
+.seg button[aria-pressed="true"] { background: var(--card); color: var(--ink); }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 1ms !important; animation-delay: 0s !important; transition-duration: 1ms !important; }
+}

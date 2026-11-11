@@ -1,0 +1,56 @@
+/* Noggin? design tokens (Bible › Brand, look, states, desktop). Colours, sizes and radii come only from here. */
+@font-face {
+  font-family: 'Bodoni Moda';
+  src: url('/fonts/BodoniModa-opsz.woff2') format('woff2');
+  font-weight: 400 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+:root {
+  /* Light (cream twin of Supernova) */
+  --paper: #f6f1e7;
+  --card: #fbf8f2;
+  --soft: #efe8da;
+  --rule: #e2d9c7;
+  --ink: #14110d;
+  --muted: #6e6556;
+  --accent: #d8b46a;
+  --on-accent: #1a140a;
+  --accent-text: #7d5a1e;
+  --brand-q: #efb94f;
+  --line-art: #c9b48a; /* thin-line drawings: welcome thoughts, empty states */
+  --danger: #b42318;
+  --scrim: rgba(20, 17, 13, .35);
+
+  --serif: 'Bodoni Moda', ui-serif, 'New York', Georgia, serif;
+  --sans: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --text-scale: 1;
+
+  --r-sm: 10px;
+  --r-md: 14px;
+  --r-lg: 22px;
+  --r-pill: 999px;
+
+  --s1: 4px; --s2: 8px; --s3: 12px; --s4: 16px; --s5: 20px; --s6: 24px; --s8: 32px;
+  --tap: 44px;
+  --ease-out: cubic-bezier(.2, .7, .2, 1);
+  color-scheme: light;
+}
+
+/* Dark = Nudge! Supernova */
+:root[data-mode="dark"] {
+  --paper: #0b0a09;
+  --card: #15130f;
+  --soft: #1b1813;
+  --rule: #2b261d;
+  --ink: #f3ece0;
+  --muted: #a89f92;
+  --accent: #d8b46a;
+  --on-accent: #1a140a;
+  --accent-text: #d8b46a;
+  --line-art: #6f6656;
+  --danger: #ff9d92;
+  --scrim: rgba(0, 0, 0, .6);
+  color-scheme: dark;
+}
