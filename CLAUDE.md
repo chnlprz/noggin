@@ -18,4 +18,4 @@ Vite + TypeScript (no framework), Dexie over IndexedDB (`src/db`), vite-plugin-p
 - Copy: gentle, never blames, says what didn't change on errors.
 
 ## Build phases (Bible › Build plan)
-1. Foundation ⏳ · 2. Thoughts core · 3. Home extras · 4. Analytics · 5. Onboarding, Settings, backups, About · 6. Account + sync · 7. Handoff to Nudge! · 8. Desktop
+1. Foundation ✅ · 2. Thoughts core · 3. Home extras · 4. Analytics · 5. Onboarding, Settings, backups, About · 6. Account + sync · 7. Handoff to Nudge! · 8. Desktop
