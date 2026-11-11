@@ -23,7 +23,8 @@
   --danger: #b42318;
   --scrim: rgba(20, 17, 13, .35);
 
-  --serif: 'Bodoni Moda', ui-serif, 'New York', Georgia, serif;
+  --serif: 'Bodoni 72', 'Bodoni Moda', Didot, Georgia, serif; /* same stack as Nudge!: iPhone and Mac use Bodoni 72 */
+  --shadow-float: 0 8px 24px rgba(0, 0, 0, .2);
   --sans: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   --text-scale: 1;
 
