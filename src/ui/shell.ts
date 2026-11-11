@@ -6,6 +6,8 @@ import { applyUpdate } from '../lib/sw';
 import { pickGreeting } from '../lib/util';
 import { archive, categories, listThoughts, restore, search, softDelete, stepCounts, unarchive } from '../logic/thoughts';
 import { openCapture } from './capture';
+import { dismissStillCurious, stillCurious } from '../logic/resurface';
+import { currentNotice, hideNotice, homeScreenSteps } from '../logic/notices';
 import { renderDetail } from './detail';
 import { h, ICON, openSheet, toast } from './kit';
 
@@ -30,6 +32,7 @@ const S = {
 };
 
 let app: HTMLElement;
+let firstPaint = true; // Home rises in on the first paint after opening the app
 const wideMQ = matchMedia('(min-width: 768px)');
 const wide = () => wideMQ.matches;
 const plural = (t: ThoughtType) => (t === 'curiosity' ? 'Curiosities' : 'Wonderings');
@@ -138,6 +141,7 @@ async function renderWide(view: HTMLElement): Promise<void> {
 
 // ── Lists ──
 async function renderList(view: HTMLElement): Promise<void> {
+  const rise = firstPaint; firstPaint = false;
   const s = await getSettings();
   const meta = await db.meta.get('meta');
   if (!S.greet[S.tab]) {
@@ -148,8 +152,10 @@ async function renderList(view: HTMLElement): Promise<void> {
   const items = S.cat ? all.filter((t) => t.categoryId === S.cat) : all;
   const catName = new Map(cats.map((c) => [c.id, c.name]));
   const sortLabel = { newest: 'Newest', oldest: 'Oldest', category: 'By category', revisited: 'Most revisited' }[S.sort];
-  const update = sessionStorage.getItem('noggin-update-ready')
-    ? `<div class="notice"><span>A new Noggin? is ready.</span><button class="link" data-reload>Reload</button></div>` : '';
+  const n = await currentNotice();
+  const update = n ? `<div class="notice"><span>${n.text}</span><span class="notice-acts">${n.action ? `<button class="link" data-notice="${n.id}">${n.action}</button>` : ''}${n.id !== 'update' ? `<button class="icon-btn sm" data-hide="${n.id}" aria-label="Hide">${ICON.x}</button>` : ''}</span></div>` : '';
+  const sc = S.selecting ? null : await stillCurious();
+  const card = sc && sc.type === S.tab ? `<div class="sc-card"><div class="label">Still curious?</div><p class="sc-text">${h(sc.text)}</p><div class="sc-acts"><button class="link" data-sc="open" data-id="${sc.id}">Open</button><button class="link muted" data-sc="later" data-id="${sc.id}">Not now</button><button class="link muted" data-sc="archive" data-id="${sc.id}">Archive</button></div></div>` : '';
 
   const rowHTML = (t: Thought) => {
     const c = counts.get(t.id);
@@ -173,9 +179,9 @@ async function renderList(view: HTMLElement): Promise<void> {
   view.innerHTML = `
     <header class="topbar"><h1 class="greet serif">${h(S.greet[S.tab]!)}</h1>
       <div class="top-icons"><button class="icon-btn" data-search aria-label="Search">${ICON.search}</button><button class="icon-btn" data-menu aria-label="Menu">${ICON.menu}</button></div></header>
-    ${update}
+    ${update}${card}
     <div class="list-tools"><button class="link muted" data-sort>${sortLabel} ▾</button>${items.length && !S.selecting ? '<button class="link muted push" data-select>Select</button>' : ''}${S.cat ? `<span class="chip on">${h(catName.get(S.cat) ?? '')}<button class="chip-x" data-clearcat aria-label="Clear category">${ICON.x}</button></span>` : ''}</div>
-    <div class="list">${body}</div>
+    <div class="list${rise ? ' rise' : ''}">${body}</div>
     ${S.selecting ? `<div class="selbar"><button class="btn-secondary" data-selcancel>Cancel</button><button class="btn-secondary" data-selall>${S.picked.size === items.length ? 'Clear' : 'Select all'}</button><button class="btn-secondary" data-selarchive ${S.picked.size ? '' : 'disabled'}>Archive${S.picked.size ? ` (${S.picked.size})` : ''}</button><button class="btn danger" data-seldel ${S.picked.size ? '' : 'disabled'}>Delete${S.picked.size ? ` (${S.picked.size})` : ''}</button></div>` : ''}`;
   if (!S.selecting) longPress(view, (id) => { S.selecting = true; S.swiped = ''; S.picked = new Set([id]); void render(); });
   if (!wide() && !S.selecting) swipeRows(view);
@@ -203,7 +209,19 @@ async function renderList(view: HTMLElement): Promise<void> {
     if (t.closest('[data-menu]')) return openMenu();
     if (t.closest('[data-sort]')) return openSort(cats);
     if (t.closest('[data-clearcat]')) { S.cat = ''; return renderList(view); }
-    if (t.closest('[data-reload]')) return applyUpdate();
+    const nb = t.closest<HTMLElement>('[data-notice]');
+    if (nb?.dataset.notice === 'update') return applyUpdate();
+    if (nb?.dataset.notice === 'a2hs') return void openSheet(`<div class="sheet-head"><h2 class="serif">Add to Home Screen</h2></div>${homeScreenSteps()}`);
+    const hb = t.closest<HTMLElement>('[data-hide]');
+    if (hb) { await hideNotice(hb.dataset.hide as 'a2hs'); return void render(); }
+    const scb = t.closest<HTMLElement>('[data-sc]');
+    if (scb) {
+      const id = scb.dataset.id!, act = scb.dataset.sc;
+      if (act === 'open') { await dismissStillCurious(); return go('detail', id); }
+      if (act === 'later') { await dismissStillCurious(14, id); return void render(); }
+      await dismissStillCurious(); await archive([id]); void render();
+      return toast('Archived', async () => { await unarchive([id]); void render(); });
+    }
     if (t.closest('[data-selcancel]')) { S.selecting = false; S.picked.clear(); return void render(); }
     if (t.closest('[data-selall]')) { if (S.picked.size === items.length) S.picked.clear(); else items.forEach((i) => S.picked.add(i.id)); return void render(); }
     if (t.closest('[data-selarchive]')) {

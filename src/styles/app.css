@@ -162,3 +162,14 @@ kbd { font: 600 11px var(--sans); opacity: .6; margin-left: 8px; }
 /* A thought can have paragraphs: keep its line breaks in details and search, not in list rows */
 .title-edit { white-space: pre-wrap; }
 .title-edit.long { font-family: var(--sans); font-size: calc(16px * var(--text-scale)); line-height: 1.55; letter-spacing: 0; font-variation-settings: normal; }
+
+/* Phase 3: Still curious? card, notices, Home rising in */
+.notice-acts { display: flex; align-items: center; gap: 4px; flex: none; }
+.sc-card { background: var(--card); border: 1px solid var(--rule); border-radius: var(--r-md); padding: 12px 14px 8px; margin: 0 0 var(--s3); animation: fadeup .35s var(--ease-out); }
+.sc-text { margin: 6px 0 2px; font-size: calc(15px * var(--text-scale)); line-height: 1.4; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; white-space: pre-line; }
+.sc-acts { display: flex; gap: 16px; }
+.steps-ol { margin: 4px 0 8px; padding-left: 20px; line-height: 1.6; }
+.list.rise > * { animation: fadeup .42s var(--ease-out) both; }
+.list.rise > *:nth-child(2) { animation-delay: 60ms; } .list.rise > *:nth-child(3) { animation-delay: 120ms; }
+.list.rise > *:nth-child(4) { animation-delay: 180ms; } .list.rise > *:nth-child(n+5) { animation-delay: 240ms; }
+@keyframes fadeup { from { opacity: 0; transform: translateY(8px); } }

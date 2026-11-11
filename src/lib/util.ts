@@ -1,5 +1,7 @@
 export const uid = (): string => crypto.randomUUID();
 export const nowISO = (): string => new Date().toISOString();
+/** Local calendar day, YYYY-MM-DD (days roll at local midnight). */
+export const today = (d = new Date()): string => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 
 export const escapeHTML = (s: string): string =>
   s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]!));

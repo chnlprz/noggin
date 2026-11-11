@@ -78,4 +78,6 @@ export interface Meta {
   installedAt: ISOTime;
   lastGreeting?: string;
   captureDraft?: string;
+  stillCurious?: { day: string; id?: string; done?: boolean }; // today's pick (Bible › Still curious?)
+  a2hsHiddenAt?: ISOTime; // Add to Home Screen notice hidden with ×
 }
