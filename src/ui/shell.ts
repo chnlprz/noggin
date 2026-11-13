@@ -81,6 +81,11 @@ function go(view: View, id = ''): void {
   void render();
 }
 const back = () => (history.state?.view ? history.back() : go('list'));
+// From inside a thought: open a Settings page directly (e.g. AI helpers → Sync and sign-in)
+document.addEventListener('noggin:settings', (e) => {
+  const p = (e as CustomEvent<string>).detail;
+  go('settings'); setSettingsPage(p); history.replaceState({ view: 'settings', sp: p }, ''); void render();
+});
 const plus = () => void openCapture(S.view === 'list' ? S.tab : S.tab, (type) => { S.tab = type; if (S.view === 'list') void render(); });
 
 // Renders run one after another, so a quick second tap never lands on a half-drawn screen.
@@ -206,8 +211,8 @@ async function renderList(view: HTMLElement): Promise<void> {
     <div class="list${rise ? ' rise' : ''}">${body}</div>
     ${S.selecting ? selectBar(S.picked.size, S.picked.size === items.length, [['selarchive', 'archive', 'Archive'], ['seldel', 'trash', 'Delete']]) : ''}`;
   if (!S.selecting) {
-    longPress(view, (id) => thoughtMenu(id));
-    view.oncontextmenu = (e) => { const row = (e.target as HTMLElement).closest<HTMLElement>('[data-open]'); if (!row) return; e.preventDefault(); thoughtMenu(row.dataset.open!); };
+    longPress(view, (id) => thoughtMenu(id, view.querySelector<HTMLElement>(`[data-open="${id}"]`)));
+    view.oncontextmenu = (e) => { const row = (e.target as HTMLElement).closest<HTMLElement>('[data-open]'); if (!row) return; e.preventDefault(); thoughtMenu(row.dataset.open!, row); };
   } else view.oncontextmenu = null;
   if (!wide() && !S.selecting) swipeRows(view);
 
@@ -293,17 +298,20 @@ function swipeRows(root: HTMLElement): void {
 }
 
 /** Long-press (or right-click) a thought: move it to the other list, select, archive or delete. */
-function thoughtMenu(id: string): void {
+function thoughtMenu(id: string, row?: HTMLElement | null): void {
   S.swiped = '';
+  row?.classList.add('held');
+  const text = row?.querySelector('.row-text')?.textContent?.trim() ?? '';
   const other = S.tab === 'curiosity' ? 'wondering' : 'curiosity';
   const otherName = other === 'curiosity' ? 'Curiosities' : 'Wonderings';
   const sheet = openSheet(`
+    ${text ? `<div class="menu-for">${h(text)}</div>` : ''}
     <div class="menu">
       <button class="menu-item" data-act="move">Move to ${otherName}</button>
       <button class="menu-item" data-act="select">Select</button>
       <button class="menu-item" data-act="archive">Archive</button>
       <button class="menu-item danger" data-act="delete">Delete</button>
-    </div>`);
+    </div>`, () => row?.classList.remove('held'));
   sheet.el.addEventListener('click', async (e) => {
     const act = (e.target as HTMLElement).closest<HTMLElement>('[data-act]')?.dataset.act;
     if (!act) return;

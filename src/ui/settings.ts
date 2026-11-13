@@ -7,11 +7,12 @@ import { nowISO, uid } from '../lib/util';
 import { restore } from '../logic/thoughts';
 import { cloud, createPasskey, friendlyError, passkeysWork, sendFeedback, signInWithPasskey, signOut, syncNow } from '../lib/cloud';
 import { h, ICON, openSheet, toast } from './kit';
+import { replayIntro } from './onboarding';
 
-export const VERSION = '1.0.0';
+export const VERSION = '1.1.0';
 const SIZES = [0.9, 1, 1.12, 1.25];
-type Page = 'main' | 'you' | 'thoughts' | 'still' | 'nudge' | 'look' | 'sync' | 'data' | 'deleted' | 'about' | 'news';
-const TITLES: Record<Page, string> = { main: 'Settings', you: 'You', thoughts: 'Thoughts', still: 'Still curious?', nudge: 'Nudge!', look: 'Theme, font and colours', sync: 'Sync and sign-in', data: 'Back up, import, reset', deleted: 'Recently deleted', about: 'About Noggin?', news: 'What’s new' };
+type Page = 'main' | 'you' | 'thoughts' | 'still' | 'nudge' | 'ai' | 'tips' | 'look' | 'sync' | 'data' | 'deleted' | 'about' | 'news';
+const TITLES: Record<Page, string> = { main: 'Settings', you: 'You', thoughts: 'Thoughts', still: 'Still curious?', nudge: 'Nudge!', ai: 'AI helpers', tips: 'How Noggin? works', look: 'Theme, font and colours', sync: 'Sync and sign-in', data: 'Back up, import, reset', deleted: 'Recently deleted', about: 'About Noggin?', news: 'What’s new' };
 let page: Page = 'main';
 
 type Nav = { back: () => void; go: (v: 'archives' | 'analytics') => void; wide: boolean; refresh: () => void };
@@ -35,6 +36,7 @@ export async function renderSettings(view: HTMLElement, nav: Nav, to?: Page): Pr
     const fontName = { serif: 'Serif', sans: 'Sans', easy: 'Easy read' }[s.font] ?? 'Serif';
     body = `
       ${grp('', [row('you', 'You', '', h(s.name || 'Friend')), row('thoughts', 'Thoughts', 'Categories, catching'), row('still', 'Still curious?', '', s.stillCurious ? 'On' : 'Off'), row('nudge', 'Nudge!', 'Sending steps', s.sendToNudge ? 'On' : 'Off')])}
+      ${grp('', [row('ai', 'AI helpers', 'A first step, a short answer', s.aiSteps || s.aiAnswers ? 'On' : 'Off'), row('tips', 'How Noggin? works', 'Tips for using the app')])}
       ${nav.wide ? '' : grp('Your thoughts', [`<button class="srow" data-goto="archives"><span class="sbody"><span class="stitle">Archives</span></span><span class="chev">${ICON.chev}</span></button>`, `<button class="srow" data-goto="analytics"><span class="sbody"><span class="stitle">Analytics</span><span class="ssub">Your thought patterns</span></span><span class="chev">${ICON.chev}</span></button>`])}
       ${grp('Look and feel', [row('look', 'Theme, font and colours', '', s.custom ? `Custom · ${fontName}` : `Noggin? · ${fontName}`), `<div class="srow col"><span class="stitle">Mode</span>${seg('setmode', s.custom ? '' : s.mode, [['light', 'Light'], ['dark', 'Dark'], ['system', 'Auto']])}</div>`])}
       ${grp('Account', [row('sync', 'Sync and sign-in', 'Use Noggin? on all your devices', c.signedIn ? 'On' : 'Off')])}
@@ -58,6 +60,26 @@ export async function renderSettings(view: HTMLElement, nav: Nav, to?: Page): Pr
   if (page === 'nudge') body = `${grp('', [tog('sendToNudge', 'Send steps to Nudge!', s.sendToNudge, 'Shows the Send button on a thought’s steps')])}
     <p class="hint">Signed in, sent steps become Nudge! tasks marked “from Noggin?”, and their status comes back here. Signed out, they’re copied into Nudge!’s Batch add.</p>
     ${grp('', [`<a class="srow" href="https://nudge.innovaspace.app" target="_blank" rel="noopener"><span class="sbody"><span class="stitle">Open Nudge!</span><span class="ssub">nudge.innovaspace.app</span></span><span class="chev">${ICON.chev}</span></a>`])}`;
+
+  if (page === 'ai') body = `${grp('', [tog('aiSteps', 'Suggest a first step', !!s.aiSteps, 'On Curiosities without steps'), tog('aiAnswers', 'Short answers', !!s.aiAnswers, 'On Wonderings, when you open one')])}
+    <p class="hint">Only the thought you’re looking at is sent, with its category (and its steps when you ask for a next one). Never your notes, other thoughts or your name. Nothing is used to train AI.</p>
+    <p class="hint">Answers stay with the thought, so each is asked once. Personal questions get things to weigh, never a verdict. A short take can be wrong, so check what matters.</p>
+    ${c.signedIn ? '' : `<p class="hint">Needs you signed in. <button class="link" data-page="sync">Sign in</button></p>`}`;
+
+  if (page === 'tips') {
+    const tip = (t: string, p: string) => `<div class="srow"><span class="sbody"><span class="stitle">${t}</span><span class="ssub wrap">${p}</span></span></div>`;
+    body = `${grp('', [
+      tip('Curiosity or Wondering?', 'A Curiosity is something you might do. A Wondering is something you want to find out.'),
+      tip('Catch fast', 'Tap +. One is one thought, even with paragraphs. Several is one thought per line.'),
+      tip('Hold a thought', 'Move it to the other list, select a few, archive or delete. Right-click on a computer.'),
+      tip('Swipe left', 'On a phone, swipe a thought left to archive or delete it.'),
+      tip('Steps go to Nudge!', 'Add steps to a Curiosity and send them. You’ll see when each one is done.'),
+      tip('Still curious?', 'Now and then an older thought comes back, in case it still matters.'),
+      tip('AI helpers', 'Optional. A first step for Curiosities, a short answer for Wonderings.'),
+      tip('Back up', 'Settings › Back up, import, reset saves everything to a file. Sign in to sync your devices.'),
+    ])}
+    <button class="link center-link" data-act="replay">See the welcome again</button>`;
+  }
 
   if (page === 'look') {
     const pal = s.custom ? customPalette(s.custom.accent, s.custom.paper) : null;
@@ -100,7 +122,10 @@ export async function renderSettings(view: HTMLElement, nav: Nav, to?: Page): Pr
     ${grp('', [`<div class="srow"><span class="sbody"><span class="stitle">Version</span></span><span class="sval">${VERSION}</span></div>`, `<div class="srow"><span class="sbody"><span class="stitle">Made by</span></span><span class="sval">Innova Space</span></div>`, `<a class="srow" href="https://innovaspace.app" target="_blank" rel="noopener"><span class="sbody"><span class="stitle">innovaspace.app</span></span><span class="chev">${ICON.chev}</span></a>`])}
     <p class="hint" style="text-align:center">© 2026 Innova Space. All rights reserved.</p>`;
 
-  if (page === 'news') body = `<section class="card news"><p class="serif" style="font-size:22px;margin:0 0 6px">1.0 · Nov 2026</p><ul>
+  if (page === 'news') body = `<section class="card news"><p class="serif" style="font-size:22px;margin:0 0 6px">1.1 · Nov 2026</p><ul>
+    <li>AI helpers (optional): a first step for a Curiosity, a short answer for a Wondering</li><li>Hold a thought to move it, select, archive or delete</li>
+    <li>A short welcome on Curiosities and Wonderings, and How Noggin? works in Settings</li><li>Long steps wrap; categories no longer double up after syncing</li></ul></section>
+    <section class="card news"><p class="serif" style="font-size:22px;margin:0 0 6px">1.0 · Nov 2026</p><ul>
     <li>Catch a thought: One or Several, Keep adding, paragraphs</li><li>Curiosities and Wonderings, details, steps, search, Archives</li>
     <li>Still curious?: one old thought a day</li><li>Analytics: your thought patterns</li><li>Settings, backups, Recently deleted, a Thoughts rising welcome</li>
     <li>Sign in with your Innova Space passkey and sync your devices</li><li>Desktop layout</li></ul>
@@ -158,6 +183,7 @@ export async function renderSettings(view: HTMLElement, nav: Nav, to?: Page): Pr
     const a = t.closest<HTMLElement>('[data-act]')?.dataset.act;
     if (!a) return;
     if (a === 'feedback') return openFeedback();
+    if (a === 'replay') return replayIntro();
     if (a === 'backup') { await downloadBackup(); toast('Backup saved to your downloads'); return redo(); }
     if (a === 'restore') return file?.click();
     if (a === 'reset') return confirmReset(() => { nav.refresh(); redo(); });

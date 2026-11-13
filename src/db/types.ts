@@ -4,11 +4,16 @@ export type ISOTime = string;
 
 export type ThoughtType = 'curiosity' | 'wondering';
 
-/** Reserved for the AI module (later). Nothing writes it in 1.x. */
+/** AI helpers (Bible › AI): the last answer or suggestion for this thought, kept so it's asked once. */
 export interface ThoughtAI {
-  answer?: string;
-  steps?: string[];
-  model: string;
+  kind: 'step' | 'fact' | 'personal' | 'vague';
+  text: string; // the step, the short answer, or (vague) the question back
+  points?: string[]; // personal: things to weigh
+  question?: string; // personal: one question back
+  next?: boolean; // step: a next step (the thought already had steps)
+  for: string; // the thought text it answered; a different text asks again on the next open
+  tried?: string[]; // steps already suggested, so Another idea is new
+  saved?: boolean; // saved to What I found
   at: ISOTime;
 }
 
@@ -68,6 +73,8 @@ export interface Settings {
   stillCurious: boolean;
   weeklyNudge: boolean;
   sendToNudge: boolean;
+  aiSteps?: boolean; // AI helpers: suggest a first step on Curiosities (off until turned on)
+  aiAnswers?: boolean; // AI helpers: short answers on Wonderings
   onboarded: boolean;
   updatedAt: ISOTime;
 }
