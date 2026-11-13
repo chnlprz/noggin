@@ -1,6 +1,6 @@
 // Thought details (Bible › Thoughts): type, text, note, category, steps with Nudge! states, Send, Archive, Delete.
 import { db } from '../db/db';
-import type { Step, StepState, Thought } from '../db/types';
+import type { Step, StepState } from '../db/types';
 import { addStep, archive, categories, editStep, markOpened, removeStep, reorderSteps, softDelete, stepsOf, unarchive, restore, updateThought } from '../logic/thoughts';
 import { autogrow, h, ICON, toast } from './kit';
 import { getSettings } from '../db/db';
@@ -29,10 +29,7 @@ export async function renderDetail(view: HTMLElement, id: string, nav: { back: (
 
   view.innerHTML = `
     <div class="sub-top detail-top"><button class="back" data-back>${ICON.back}<span>Back</span></button></div>
-    <div class="tabs" role="tablist" aria-label="Type">
-      <button role="tab" data-type="curiosity" aria-selected="${t.type === 'curiosity'}">Curiosity</button>
-      <button role="tab" data-type="wondering" aria-selected="${t.type === 'wondering'}">Wondering</button>
-    </div>
+    <div class="label type-label">${t.type === 'curiosity' ? 'Curiosity' : 'Wondering'}</div>
     <textarea class="title-edit serif" id="dText" rows="1" aria-label="Thought">${h(t.text)}</textarea>
     <label class="label" for="dNote" style="display:block;margin:18px 0 6px">${t.type === 'wondering' ? 'What I found' : 'Note'}</label>
     <textarea class="field area" id="dNote" rows="2" placeholder="${t.type === 'wondering' ? 'What you’ve learned so far…' : 'Add a note'}">${h(t.note ?? '')}</textarea>
@@ -72,12 +69,6 @@ export async function renderDetail(view: HTMLElement, id: string, nav: { back: (
   view.onclick = async (e) => {
     const el = e.target as HTMLElement;
     if (el.closest('[data-back]')) return nav.back();
-    const tb = el.closest<HTMLElement>('[data-type]');
-    if (tb && tb.dataset.type !== t.type) {
-      await updateThought(id, { type: tb.dataset.type as Thought['type'] });
-      toast(`Moved to ${tb.dataset.type === 'curiosity' ? 'Curiosities' : 'Wonderings'}`);
-      return renderDetail(view, id, nav, false);
-    }
     const cb = el.closest<HTMLElement>('[data-cat]');
     if (cb) { await updateThought(id, { categoryId: t.categoryId === cb.dataset.cat ? undefined : cb.dataset.cat }); return renderDetail(view, id, nav, false); }
     const rm = el.closest<HTMLElement>('[data-rm]');

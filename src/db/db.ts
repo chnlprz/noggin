@@ -1,6 +1,6 @@
 import Dexie, { type Table } from 'dexie';
 import type { Category, Meta, Settings, Step, Thought } from './types';
-import { defaultCategories, defaultSettings, newMeta } from './defaults';
+import { BUILT_IN_CATEGORIES, builtInId, defaultCategories, defaultSettings, newMeta } from './defaults';
 import { nowISO } from '../lib/util';
 
 export const SCHEMA_VERSION = 1;
@@ -34,6 +34,7 @@ export async function ensureSeeded(): Promise<void> {
     if ((await db.categories.count()) === 0) await db.categories.bulkPut(defaultCategories());
     if (!(await db.meta.get('meta'))) await db.meta.put(newMeta(SCHEMA_VERSION));
   });
+  await dedupeCategories();
 }
 
 export async function getSettings(): Promise<Settings> {
@@ -44,6 +45,31 @@ export async function updateSettings(patch: Partial<Omit<Settings, 'id'>>): Prom
   const next = { ...(await getSettings()), ...patch, updatedAt: nowISO() };
   await db.settings.put(next);
   return next;
+}
+
+/**
+ * Before 1.0.1 each device made its own four built-in categories, so syncing two devices showed each twice.
+ * Keep one per name (the fixed-id one, made if missing), move thoughts onto it, delete the rest. Safe to run often.
+ */
+export async function dedupeCategories(): Promise<number> {
+  let removed = 0;
+  await db.transaction('rw', db.categories, db.thoughts, async () => {
+    const cats = await db.categories.toArray();
+    for (const [order, name] of BUILT_IN_CATEGORIES.entries()) {
+      const id = builtInId(name);
+      const same = cats.filter((c) => c.builtIn && (c.id === id || c.name.trim().toLowerCase() === name.toLowerCase() || c.id === id));
+      const extras = same.filter((c) => c.id !== id);
+      if (!extras.length) continue;
+      const keep = same.find((c) => c.id === id) ?? { ...extras[0], id, order };
+      if (!same.some((c) => c.id === id)) await db.categories.put({ ...keep, updatedAt: nowISO() });
+      for (const x of extras) {
+        await db.thoughts.where('categoryId').equals(x.id).modify({ categoryId: id, updatedAt: nowISO() });
+        await db.categories.delete(x.id);
+        removed++;
+      }
+    }
+  });
+  return removed;
 }
 
 /** Deleted thoughts (and their steps) are kept 30 days, then removed for good. */

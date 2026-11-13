@@ -1,11 +1,14 @@
 import type { Category, Meta, Settings } from './types';
-import { nowISO, uid } from '../lib/util';
+import { nowISO } from '../lib/util';
 
 export const BUILT_IN_CATEGORIES = ['Learning', 'Ideas', 'Work', 'Life'];
 
+export const builtInId = (name: string) => `cat-${name.toLowerCase()}`;
+
 export function defaultCategories(): Category[] {
   const at = nowISO();
-  return BUILT_IN_CATEGORIES.map((name, order) => ({ id: uid(), name, order, builtIn: true, updatedAt: at }));
+  // Fixed ids, so two devices that each started fresh share the same four categories after sync.
+  return BUILT_IN_CATEGORIES.map((name, order) => ({ id: builtInId(name), name, order, builtIn: true, updatedAt: at }));
 }
 
 export function defaultSettings(): Settings {

@@ -303,3 +303,7 @@ kbd { font: 600 11px var(--sans); opacity: .6; margin-left: 8px; }
 .btn.big { min-height: 54px; font-size: 17px; margin-top: 10px; }
 .sheet .field { background: var(--paper); }
 .field.plain:focus, .field.plain:focus-visible { outline: none; box-shadow: inset 0 -1px 0 var(--accent); }
+
+/* Thought menu (long-press) and the type label in a thought */
+.menu-item.danger { color: var(--danger); }
+.type-label { margin: 4px 0 8px; }

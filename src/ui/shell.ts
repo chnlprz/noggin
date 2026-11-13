@@ -4,10 +4,10 @@ import type { Category, Mode, Thought, ThoughtType } from '../db/types';
 import { applyLook } from '../lib/look';
 import { applyUpdate } from '../lib/sw';
 import { pickGreeting } from '../lib/util';
-import { archive, categories, listThoughts, restore, search, softDelete, stepCounts, unarchive } from '../logic/thoughts';
+import { archive, categories, listThoughts, restore, search, softDelete, stepCounts, unarchive, updateThought } from '../logic/thoughts';
 import { openCapture } from './capture';
 import { renderAnalytics } from './analytics';
-import { renderSettings, resetSettingsPage } from './settings';
+import { renderSettings, setSettingsPage } from './settings';
 import { downloadBackup } from '../db/backup';
 import { dismissStillCurious, stillCurious } from '../logic/resurface';
 import { currentNotice, hideNotice, homeScreenSteps } from '../logic/notices';
@@ -47,7 +47,14 @@ export function startShell(root: HTMLElement): void {
   app = root;
   app.innerHTML = `<aside class="sidebar" id="side" aria-label="Noggin?"></aside><div class="shell"><div id="view"></div></div><nav class="bottombar" id="bar" aria-label="Lists"></nav>`;
   wideMQ.addEventListener('change', () => { if (wide() && S.view === 'detail') S.view = S.left; void render(); });
-  window.addEventListener('popstate', () => { S.view = (history.state?.view as View) ?? 'list'; S.id = history.state?.id ?? ''; void render(); });
+  window.addEventListener('popstate', () => {
+    const st = history.state as { view?: View; id?: string; sp?: string } | null;
+    S.view = st?.view ?? 'list'; S.id = st?.id ?? '';
+    if (S.view !== 'detail') S.left = S.view as typeof S.left;
+    if (S.view === 'settings') setSettingsPage(st?.sp);
+    document.getElementById('view')!.style.transform = '';
+    void render();
+  });
   window.addEventListener('noggin:update-ready', () => void render());
   document.addEventListener('keydown', (e) => {
     const r = e.target as HTMLElement;
@@ -66,7 +73,7 @@ export function startShell(root: HTMLElement): void {
 function go(view: View, id = ''): void {
   if (view === 'detail' && wide()) { S.id = id; void render(); return; } // desktop: details open in the right pane
   if (view !== 'detail') { S.left = view; if (wide()) S.id = ''; }
-  if (view === 'settings') resetSettingsPage();
+  if (view === 'settings') setSettingsPage('main');
   S.view = view; S.id = id || (view === 'detail' ? id : S.id); S.selecting = false; S.picked.clear();
   if (view === 'list') history.replaceState(null, '');
   else history.pushState({ view, id }, '');
@@ -198,7 +205,10 @@ async function renderList(view: HTMLElement): Promise<void> {
     <div class="list-tools">${S.sort !== 'newest' ? `<span class="muted small">${sortLabel}</span>` : ''}${S.cat ? `<span class="chip on">${h(catName.get(S.cat) ?? '')}<button class="chip-x" data-clearcat aria-label="Clear category">${ICON.x}</button></span>` : ''}<span class="push"></span>${items.length && !S.selecting ? '<button class="link muted" data-select>Select</button>' : ''}<button class="icon-btn${S.cat || S.sort !== 'newest' ? ' active' : ''}" data-sort aria-label="Sort and filter" title="Sort and filter">${ICON.filter}</button></div>
     <div class="list${rise ? ' rise' : ''}">${body}</div>
     ${S.selecting ? selectBar(S.picked.size, S.picked.size === items.length, [['selarchive', 'archive', 'Archive'], ['seldel', 'trash', 'Delete']]) : ''}`;
-  if (!S.selecting) longPress(view, (id) => { S.selecting = true; S.swiped = ''; S.picked = new Set([id]); void render(); });
+  if (!S.selecting) {
+    longPress(view, (id) => thoughtMenu(id));
+    view.oncontextmenu = (e) => { const row = (e.target as HTMLElement).closest<HTMLElement>('[data-open]'); if (!row) return; e.preventDefault(); thoughtMenu(row.dataset.open!); };
+  } else view.oncontextmenu = null;
   if (!wide() && !S.selecting) swipeRows(view);
 
   view.onclick = async (e) => {
@@ -282,7 +292,36 @@ function swipeRows(root: HTMLElement): void {
   };
 }
 
-/** Hold a row for half a second to start selecting with it picked. The click right after is swallowed. */
+/** Long-press (or right-click) a thought: move it to the other list, select, archive or delete. */
+function thoughtMenu(id: string): void {
+  S.swiped = '';
+  const other = S.tab === 'curiosity' ? 'wondering' : 'curiosity';
+  const otherName = other === 'curiosity' ? 'Curiosities' : 'Wonderings';
+  const sheet = openSheet(`
+    <div class="menu">
+      <button class="menu-item" data-act="move">Move to ${otherName}</button>
+      <button class="menu-item" data-act="select">Select</button>
+      <button class="menu-item" data-act="archive">Archive</button>
+      <button class="menu-item danger" data-act="delete">Delete</button>
+    </div>`);
+  sheet.el.addEventListener('click', async (e) => {
+    const act = (e.target as HTMLElement).closest<HTMLElement>('[data-act]')?.dataset.act;
+    if (!act) return;
+    sheet.close();
+    if (act === 'move') {
+      await updateThought(id, { type: other });
+      if (S.id === id) S.id = '';
+      void render();
+      return toast(`Moved to ${otherName}`, async () => { await updateThought(id, { type: S.tab }); void render(); });
+    }
+    if (act === 'select') { S.selecting = true; S.picked = new Set([id]); return void render(); }
+    if (act === 'archive') { await archive([id]); if (S.id === id) S.id = ''; void render(); return toast('Archived', async () => { await unarchive([id]); void render(); }); }
+    await softDelete([id]); if (S.id === id) S.id = ''; void render();
+    toast('Thought deleted', async () => { await restore([id]); void render(); });
+  });
+}
+
+/** Hold a row for half a second to open its menu. The click right after is swallowed. */
 let pressed = false;
 function longPress(root: HTMLElement, fire: (id: string) => void): void {
   let timer = 0, x = 0, y = 0;

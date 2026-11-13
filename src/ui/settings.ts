@@ -142,9 +142,9 @@ export async function renderSettings(view: HTMLElement, nav: Nav, to?: Page): Pr
 
   view.onclick = async (e) => {
     const t = e.target as HTMLElement;
-    if (t.closest('[data-back]')) { if (page === 'main') return nav.back(); page = page === 'deleted' ? 'data' : 'main'; return redo(); }
+    if (t.closest('[data-back]')) return nav.back();
     const pg = t.closest<HTMLElement>('[data-page]');
-    if (pg) { page = pg.dataset.page as Page; window.scrollTo(0, 0); return redo(); }
+    if (pg) { page = pg.dataset.page as Page; history.pushState({ view: 'settings', sp: page }, ''); window.scrollTo(0, 0); return redo(); }
     const g = t.closest<HTMLElement>('[data-goto]');
     if (g) return nav.go(g.dataset.goto as 'archives' | 'analytics');
     const m = t.closest<HTMLElement>('[data-setmode]');
@@ -175,7 +175,8 @@ export async function renderSettings(view: HTMLElement, nav: Nav, to?: Page): Pr
   };
 }
 
-export function resetSettingsPage(): void { page = 'main'; }
+/** Each Settings page is its own history entry, so swipe back and the back button return one page at a time. */
+export function setSettingsPage(p?: string): void { page = (p as Page) || 'main'; }
 
 async function deleteCategory(id: string, after: () => void): Promise<void> {
   const cat = (await db.categories.get(id)) as Category;

@@ -2,7 +2,7 @@ import './styles/tokens.css';
 import './styles/base.css';
 import './styles/app.css';
 import './lib/sw';
-import { ensureSeeded, getSettings, purgeDeleted } from './db/db';
+import { dedupeCategories, ensureSeeded, getSettings, purgeDeleted } from './db/db';
 import { applyLook, onSystemModeChange } from './lib/look';
 import { isInstalled, requestPersistence } from './lib/storage';
 import { renderWelcome } from './ui/onboarding';
@@ -27,7 +27,8 @@ const app = document.getElementById('app')!;
     if (busy) { const again = () => { document.removeEventListener('focusout', again); setTimeout(redraw, 300); }; document.addEventListener('focusout', again); return; }
     if (document.querySelector('.shell')) { void getSettings().then(applyLook); void render(); }
   };
-  startAutoSync(redraw);
+  // Rows from another device can bring the old duplicate categories: tidy them, then redraw.
+  startAutoSync(() => { void dedupeCategories().then(redraw); });
   // From Nudge!'s "Open in Noggin?" (#t-<thought id>)
   const deep = location.hash.match(/^#t-(.+)$/);
   if (deep) history.replaceState(null, '', location.pathname);
