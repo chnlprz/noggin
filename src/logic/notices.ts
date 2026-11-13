@@ -12,10 +12,9 @@ export async function currentNotice(): Promise<Notice | null> {
   if (sessionStorage.getItem('noggin-update-ready')) return { id: 'update', text: 'A new Noggin? is ready.', action: 'Reload' };
   if (isPhone() && !isInstalled()) {
     const meta = await db.meta.get('meta');
-    const since = meta ? Date.now() - Date.parse(meta.installedAt) : 0;
     const hidden = meta?.a2hsHiddenAt ? Date.now() - Date.parse(meta.a2hsHiddenAt) : Infinity;
-    // From day 3, then again a week after each ×.
-    if (since >= 3 * DAY && hidden >= 7 * DAY) return { id: 'a2hs', text: 'Add Noggin? to your Home Screen so your thoughts stay safe.', action: 'How' };
+    // From the first Home after onboarding, then again a week after each ×.
+    if (hidden >= 7 * DAY) return { id: 'a2hs', text: 'Add Noggin? to your Home Screen for the full app: full screen, faster, and your thoughts stay safe.', action: 'How' };
   }
   // 3 Backup reminder: 10+ thoughts and no backup in 14 days (× hides it for a week).
   const meta = await db.meta.get('meta');

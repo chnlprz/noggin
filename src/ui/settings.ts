@@ -8,6 +8,7 @@ import { restore } from '../logic/thoughts';
 import { cloud, createPasskey, friendlyError, passkeysWork, sendFeedback, signInWithPasskey, signOut, syncNow } from '../lib/cloud';
 import { h, ICON, openSheet, toast } from './kit';
 import { replayIntro } from './onboarding';
+import { homeScreenSteps } from '../logic/notices';
 
 export const VERSION = '1.1.0';
 const SIZES = [0.9, 1, 1.12, 1.25];
@@ -69,6 +70,7 @@ export async function renderSettings(view: HTMLElement, nav: Nav, to?: Page): Pr
   if (page === 'tips') {
     const tip = (t: string, p: string) => `<div class="srow"><span class="sbody"><span class="stitle">${t}</span><span class="ssub wrap">${p}</span></span></div>`;
     body = `${grp('', [
+      `<button class="srow" data-act="a2hs"><span class="sbody"><span class="stitle">Add to Home Screen</span><span class="ssub wrap">Open Noggin? like an app: full screen, faster, and your thoughts stay safe.</span></span><span class="chev">${ICON.chev}</span></button>`,
       tip('Curiosity or Wondering?', 'A Curiosity is something you might do. A Wondering is something you want to find out.'),
       tip('Catch fast', 'Tap +. One is one thought, even with paragraphs. Several is one thought per line.'),
       tip('Hold a thought', 'Move it to the other list, select a few, archive or delete. Right-click on a computer.'),
@@ -184,6 +186,7 @@ export async function renderSettings(view: HTMLElement, nav: Nav, to?: Page): Pr
     if (!a) return;
     if (a === 'feedback') return openFeedback();
     if (a === 'replay') return replayIntro();
+    if (a === 'a2hs') return void openSheet(`<div class="sheet-head"><h2 class="serif">Add to Home Screen</h2></div>${homeScreenSteps()}`);
     if (a === 'backup') { await downloadBackup(); toast('Backup saved to your downloads'); return redo(); }
     if (a === 'restore') return file?.click();
     if (a === 'reset') return confirmReset(() => { nav.refresh(); redo(); });
