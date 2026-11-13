@@ -18,7 +18,7 @@ type View = 'list' | 'detail' | 'search' | 'archives' | 'analytics' | 'settings'
 type Sort = 'newest' | 'oldest' | 'category' | 'revisited';
 
 const S = {
-  tab: 'curiosity' as ThoughtType,
+  tab: (localStorage.getItem('noggin-tab') === 'wondering' ? 'wondering' : 'curiosity') as ThoughtType, // remembered, so a reload keeps your list
   view: 'list' as View,
   left: 'list' as Exclude<View, 'detail'>, // desktop: what the left column shows
   openedId: '', // counts a revisit once per opening
@@ -95,9 +95,16 @@ export function render(): Promise<void> {
   return queue;
 }
 
+function setTab(t: ThoughtType): void {
+  S.tab = t; S.cat = ''; S.selecting = false; S.picked.clear(); S.swiped = '';
+  try { localStorage.setItem('noggin-tab', t); } catch { /* private mode: it just isn't remembered */ }
+  window.scrollTo(0, 0); void render();
+}
+
 async function draw(): Promise<void> {
   const view = document.getElementById('view')!;
   const bar = document.getElementById('bar')!;
+  try { localStorage.setItem('noggin-tab', S.tab); } catch { /* private mode: not remembered */ }
   bar.hidden = S.view !== 'list' || S.selecting;
   bar.innerHTML = `
     <button class="tab-btn" data-tab="curiosity" ${S.tab === 'curiosity' ? 'aria-current="page"' : ''}>Curiosities</button>
@@ -107,7 +114,7 @@ async function draw(): Promise<void> {
     const t = e.target as HTMLElement;
     if (t.closest('[data-plus]')) return plus();
     const tb = t.closest<HTMLElement>('[data-tab]');
-    if (tb) { S.tab = tb.dataset.tab as ThoughtType; S.cat = ''; S.selecting = false; S.picked.clear(); window.scrollTo(0, 0); void render(); }
+    if (tb) return setTab(tb.dataset.tab as ThoughtType);
   };
   if (wide()) return renderWide(view);
   if (S.view === 'detail') return detailInto(view, back);
@@ -152,7 +159,7 @@ async function renderWide(view: HTMLElement): Promise<void> {
     const b = t.closest<HTMLElement>('[data-side]');
     if (!b || b.hasAttribute('disabled')) return;
     const k = b.dataset.side!;
-    if (k === 'curiosity' || k === 'wondering') { S.tab = k; S.cat = ''; return go('list'); }
+    if (k === 'curiosity' || k === 'wondering') { S.tab = k; S.cat = ''; try { localStorage.setItem('noggin-tab', k); } catch { /* not remembered */ } return go('list'); }
     if (k === 'search' || k === 'archives' || k === 'analytics' || k === 'settings') return go(k);
   };
   view.innerHTML = `<div class="split"><div id="main"></div><div id="pane" aria-live="polite"></div></div>`;
@@ -206,6 +213,7 @@ async function renderList(view: HTMLElement): Promise<void> {
   view.innerHTML = `
     <header class="topbar"><h1 class="greet serif">${h(S.greet)}</h1>
       <div class="top-icons"><button class="icon-btn" data-search aria-label="Search">${ICON.search}</button><button class="icon-btn" data-menu aria-label="Settings" title="Settings">${ICON.menu}</button></div></header>
+    <div class="tabs home-tabs" role="tablist" aria-label="List"><button role="tab" data-tab="curiosity" aria-selected="${S.tab === 'curiosity'}">Curiosities</button><button role="tab" data-tab="wondering" aria-selected="${S.tab === 'wondering'}">Wonderings</button></div>
     ${update}${card}
     <div class="list-tools">${S.sort !== 'newest' ? `<span class="muted small">${sortLabel}</span>` : ''}${S.cat ? `<span class="chip on">${h(catName.get(S.cat) ?? '')}<button class="chip-x" data-clearcat aria-label="Clear category">${ICON.x}</button></span>` : ''}<span class="push"></span>${items.length && !S.selecting ? '<button class="link muted" data-select>Select</button>' : ''}<button class="icon-btn${S.cat || S.sort !== 'newest' ? ' active' : ''}" data-sort aria-label="Sort and filter" title="Sort and filter">${ICON.filter}</button></div>
     <div class="list${rise ? ' rise' : ''}">${body}</div>
@@ -235,6 +243,8 @@ async function renderList(view: HTMLElement): Promise<void> {
       if (S.selecting) { const id = row.dataset.open!; S.picked.has(id) ? S.picked.delete(id) : S.picked.add(id); return void render(); }
       return go('detail', row.dataset.open);
     }
+    const ht = t.closest<HTMLElement>('[data-tab]');
+    if (ht) return setTab(ht.dataset.tab as ThoughtType);
     if (t.closest('[data-search]')) return go('search');
     if (t.closest('[data-menu]')) return go('settings');
     if (t.closest('[data-sort]')) return openSort(cats);
