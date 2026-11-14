@@ -54,6 +54,34 @@ export function openSheet(html: string, onClose?: () => void): { el: HTMLElement
   const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') close(); };
   document.addEventListener('keydown', onKey);
   back.addEventListener('pointerdown', (e) => { if (e.target === back) close(); });
+  // Swipe down to close (every sheet): drag the top bar, or anywhere once the sheet is scrolled to the top.
+  let y0 = -1, dy = 0, dragging = false;
+  el.addEventListener('touchstart', (e) => {
+    const t = e.touches[0], top = t.clientY - el.getBoundingClientRect().top;
+    if (e.touches.length > 1 || (el.scrollTop > 0 && top > 56)) return;
+    if (top > 56 && (e.target as HTMLElement).closest('input, textarea, select, [contenteditable], .seg, .chips, .vc-review')) return;
+    y0 = t.clientY; dy = 0; dragging = false;
+  }, { passive: true });
+  el.addEventListener('touchmove', (e) => {
+    if (y0 < 0) return;
+    dy = e.touches[0].clientY - y0;
+    if (!dragging && dy > 10 && el.scrollTop <= 0) { dragging = true; el.style.transition = 'none'; el.style.animation = 'none'; }
+    if (!dragging) return;
+    e.preventDefault();
+    el.style.transform = `translateY(${Math.max(0, dy)}px)`;
+    back.style.background = `rgb(0 0 0 / ${Math.max(0.05, 0.35 * (1 - dy / 400))})`;
+  }, { passive: false });
+  el.addEventListener('touchend', () => {
+    if (y0 < 0) return;
+    y0 = -1;
+    if (!dragging) return;
+    dragging = false;
+    if (dy > 110) {
+      if (matchMedia('(prefers-reduced-motion: reduce)').matches) return close();
+      el.style.transition = 'transform 180ms ease-in'; el.style.transform = 'translateY(100%)';
+      setTimeout(close, 170);
+    } else { el.style.transition = 'transform 160ms ease-out'; el.style.transform = ''; back.style.background = ''; }
+  });
   return { el, close };
 }
 

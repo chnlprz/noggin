@@ -4,6 +4,10 @@ export type ISOTime = string;
 
 export type ThoughtType = 'curiosity' | 'wondering';
 
+/** Say it (Labs beta): one card to check before it's saved. */
+export interface SayItem { text: string; type: ThoughtType; categoryId: string | null; steps: string[] }
+export interface SayDraft { at: number; text: string; items: SayItem[]; checked: string[] }
+
 /** AI helpers (Bible › AI): the last answer or suggestion for this thought, kept so it's asked once. */
 export interface ThoughtAI {
   kind: 'step' | 'fact' | 'personal' | 'vague';
@@ -75,6 +79,10 @@ export interface Settings {
   sendToNudge: boolean;
   aiSteps?: boolean; // AI helpers: suggest a first step on Curiosities (off until turned on)
   aiAnswers?: boolean; // AI helpers: short answers on Wonderings
+  labsSay?: boolean; // Preview tools › Labs › Say it (beta): a mic when you catch a thought
+  sayTipsSeen?: boolean;
+  shareUsage?: boolean; // Sync › Beta: share which features I use (counts only)
+  usageAsked?: boolean; // the one-time Home notice was answered
   onboarded: boolean;
   updatedAt: ISOTime;
 }
@@ -86,6 +94,7 @@ export interface Meta {
   installedAt: ISOTime;
   lastGreeting?: string;
   captureDraft?: string;
+  sayDraft?: SayDraft; // Say it: words and checked cards not saved yet, kept 24 h
   stillCurious?: { day: string; id?: string; done?: boolean }; // today's pick (Bible › Still curious?)
   a2hsHiddenAt?: ISOTime; // Add to Home Screen notice hidden with ×
   lastBackupAt?: ISOTime;

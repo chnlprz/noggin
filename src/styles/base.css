@@ -1,5 +1,5 @@
 *, *::before, *::after { box-sizing: border-box; min-width: 0; }
-html, body { margin: 0; padding: 0; }
+html, body { margin: 0; padding: 0; overscroll-behavior: none; }
 html { background: var(--paper); -webkit-text-size-adjust: 100%; -webkit-tap-highlight-color: transparent; }
 body {
   background: var(--paper); color: var(--ink);

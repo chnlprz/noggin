@@ -1,19 +1,21 @@
 // Settings, laid out like Nudge!'s (Bible › Onboarding, Settings, About): a menu of grouped rows, each opening its own page.
+import { buildReport, reportText, seen, sendUsage, usageDays, usageState } from '../lib/usage';
+import type { Days } from '../lib/usageReport';
 import { db, getSettings, updateSettings } from '../db/db';
 import { downloadBackup, previewBackup, restoreBackup, RESTORE_REASONS } from '../db/backup';
 import type { Category, FontChoice, Mode, Settings, Thought } from '../db/types';
 import { applyLook, contrast, customPalette } from '../lib/look';
-import { nowISO, uid } from '../lib/util';
+import { nowISO, today, uid } from '../lib/util';
 import { restore } from '../logic/thoughts';
-import { cloud, createPasskey, friendlyError, passkeysWork, sendFeedback, signInWithPasskey, signOut, syncNow } from '../lib/cloud';
+import { call, cloud, createPasskey, friendlyError, passkeysWork, sendFeedback, signInWithPasskey, signOut, syncNow } from '../lib/cloud';
 import { h, ICON, openSheet, toast } from './kit';
 import { replayIntro } from './onboarding';
 import { homeScreenSteps } from '../logic/notices';
 
-export const VERSION = '1.1.0';
+export const VERSION = '1.2.0';
 const SIZES = [0.9, 1, 1.12, 1.25];
-type Page = 'main' | 'you' | 'thoughts' | 'still' | 'nudge' | 'ai' | 'tips' | 'look' | 'sync' | 'data' | 'deleted' | 'about' | 'news';
-const TITLES: Record<Page, string> = { main: 'Settings', you: 'You', thoughts: 'Thoughts', still: 'Still curious?', nudge: 'Nudge!', ai: 'AI helpers', tips: 'How Noggin? works', look: 'Theme, font and colours', sync: 'Sync and sign-in', data: 'Back up, import, reset', deleted: 'Recently deleted', about: 'About Noggin?', news: 'What’s new' };
+type Page = 'main' | 'you' | 'thoughts' | 'still' | 'nudge' | 'ai' | 'tips' | 'preview' | 'usage' | 'look' | 'sync' | 'data' | 'deleted' | 'about' | 'news';
+const TITLES: Record<Page, string> = { main: 'Settings', you: 'You', thoughts: 'Thoughts', still: 'Still curious?', nudge: 'Nudge!', ai: 'AI helpers', tips: 'How Noggin? works', preview: 'Preview tools', usage: 'Usage report', look: 'Theme, font and colours', sync: 'Sync and sign-in', data: 'Back up, import, reset', deleted: 'Recently deleted', about: 'About Noggin?', news: 'What’s new' };
 let page: Page = 'main';
 
 type Nav = { back: () => void; go: (v: 'archives' | 'analytics') => void; wide: boolean; refresh: () => void };
@@ -32,6 +34,8 @@ export async function renderSettings(view: HTMLElement, nav: Nav, to?: Page): Pr
   const meta = await db.meta.get('meta');
   const c = cloud.get();
   let body = '';
+  if (page === 'main') seen('view.settings');
+  if (page === 'tips') seen('view.tips');
 
   if (page === 'main') {
     const fontName = { serif: 'Serif', sans: 'Sans', easy: 'Easy read' }[s.font] ?? 'Serif';
@@ -43,6 +47,7 @@ export async function renderSettings(view: HTMLElement, nav: Nav, to?: Page): Pr
       ${grp('Account', [row('sync', 'Sync and sign-in', 'Use Noggin? on all your devices', c.signedIn ? 'On' : 'Off')])}
       ${grp('Your data', [row('data', 'Back up, import, reset', '', meta?.lastBackupAt ? `Backed up ${day(meta.lastBackupAt)}` : 'Never backed up')])}
       ${grp('About', [row('about', 'About Noggin?', '', VERSION), row('news', 'What’s new', '', VERSION), act('feedback', 'Send feedback')])}
+      ${grp('Beta', [row('preview', 'Preview tools', 'Labs, setup and testing', s.labsSay ? 'Labs on' : '')])}
       <div class="brand-foot"><div class="wordmark">Noggin<span class="q">?</span></div><p>Stay curious.</p><p>Version ${VERSION}</p><p>© 2026 Innova Space. All rights reserved.</p></div>`;
   }
 
@@ -83,6 +88,46 @@ export async function renderSettings(view: HTMLElement, nav: Nav, to?: Page): Pr
     <button class="link center-link" data-act="replay">See the welcome again</button>`;
   }
 
+  if (page === 'preview') body = `${grp('Labs', [tog('labsSay', 'Say it <span class="vc-beta">Beta</span>', !!s.labsSay, 'A mic when you catch a thought')])}
+    <p class="hint">Up to 2 minutes, any language, even mixed. Noggin? writes it down and sorts each thought; you check them before anything is saved. In Several, typed lines get checked the same way. Needs you signed in.</p>
+    ${c.signedIn ? '' : `<p class="hint">You’re signed out. <button class="link" data-page="sync">Sign in</button></p>`}
+    ${grp('Setup', [act('replaysetup', 'Replay the welcome and setup', 'Your thoughts and settings stay')])}
+    ${grp('Testing', [row('usage', 'Usage report', 'Which features get used · counts only')])}
+    <p class="hint">These are here for the beta and go away after it.</p>`;
+
+  if (page === 'usage') {
+    let days = usageDays(), who = 'Me', extra = '', testers = '', allMsg = '';
+    if (uWho === 'all') {
+      try {
+        const r = await call<{ owner: boolean; userId?: string; days?: Days; testers?: number; active?: number; states?: Record<string, unknown>[] }>('/usage/all', { span: uSpan });
+        if (!r.owner) { allMsg = `<section class="card u-card"><b>Only the owner sees All testers</b><p class="hint" style="margin:0">This account’s ID: <b data-uid>${h(r.userId ?? '')}</b>. Send it to Claude to unlock All testers here.</p><button type="button" class="vc-sbtn" data-act="u:id">Copy the ID</button></section>`; days = {}; }
+        else { days = r.days ?? {}; who = `All testers (${r.active ?? 0} active)`; testers = String(r.testers ?? 0); const st = r.states ?? []; const on = (k: string) => st.filter((x) => x[k] === true).length; extra = `Turned on, of ${st.length} sharing: Say it ${on('labsSay')}, AI first step ${on('aiSteps')}, AI short answers ${on('aiAnswers')}, send to Nudge! ${on('sendToNudge')}`; }
+      } catch (err) { allMsg = `<p class="hint">${h(friendlyError(err))} Your own report still works.</p>`; days = {}; }
+    }
+    const r = buildReport(days, uSpan, today());
+    const state = uWho === 'me' ? await usageState() : undefined;
+    lastReport = reportText(r, who, state) + (extra ? `\n\n${extra}` : '');
+    const pct = (a: number, t: number) => (t ? Math.round((a / t) * 100) : 0);
+    const split = (rows: [string, number, string][]) => { const t = rows.reduce((n, x) => n + x[1], 0); return `<div class="card u-vs"><div class="u-split">${rows.map(([, v, col]) => `<i style="width:${pct(v, t)}%;background:${col}"></i>`).join('')}</div>${rows.map(([l, v, col]) => `<div class="u-row"><span><span class="dot" style="background:${col}"></span>${l}</span><b>${pct(v, t)}% · ${v}</b></div>`).join('')}${t ? '' : '<p class="hint" style="margin:0">Nothing yet in these days.</p>'}</div>`; };
+    const since = Object.keys(usageDays()).sort()[0];
+    const grpF = (g: 'essential' | 'sometimes' | 'barely') => r.features.filter((f) => f.group === g).map((f) => g === 'barely'
+      ? `<div class="u-r"><span class="sbody"><span class="stitle">${h(f.label)}</span><span class="ssub">${f.last ? `Last used ${day(`${f.last}T12:00:00`)}` : `Not in ${uSpan} days`}</span></span><span class="u-pill">${f.days ? `${f.days} day${f.days === 1 ? '' : 's'}` : '0'}</span></div>`
+      : `<div class="u-r"><span class="sbody"><span class="stitle">${h(f.label)}</span><span class="ssub">${f.days} of ${r.activeDays} days · ${f.uses} use${f.uses === 1 ? '' : 's'}</span></span><span class="u-bar"><i style="width:${pct(f.days, Math.max(1, r.activeDays))}%"></i></span><b class="u-n">${f.days}</b></div>`).join('');
+    const sect = (t: string, g: 'essential' | 'sometimes' | 'barely') => { const x = grpF(g); return x ? `<p class="set-h">${t}</p><div class="set-group">${x}</div>` : ''; };
+    body = `<div class="seg u-seg" role="group" aria-label="Whose usage"><button type="button" data-u="me" aria-pressed="${uWho === 'me'}">Me</button><button type="button" data-u="all" aria-pressed="${uWho === 'all'}">All testers${testers ? ` · ${testers}` : ''}</button></div>
+      <div class="seg u-seg" role="group" aria-label="Days">${[7, 14, 30].map((d) => `<button type="button" data-us="${d}" aria-pressed="${uSpan === d}">${d} days</button>`).join('')}</div>
+      <p class="hint">Counts only: which features were used and how often. No thought text is kept.${uWho === 'me' && since ? ` Counting on this device since ${day(`${since}T12:00:00`)}.` : ''}</p>
+      ${allMsg}
+      <p class="set-h">How thoughts get caught</p>${split([['Typed, one', r.add.one, 'var(--accent)'], ['Typed, several', r.add.several, 'var(--accent-text)'], ['Say it', r.add.say, 'var(--ink)'], ['Typed, checked by AI', r.add.checked, 'var(--muted)']])}
+      ${r.sayAvgSecs !== null ? `<p class="hint">Say it: about ${r.sayAvgSecs} seconds per recording.</p>` : ''}
+      <p class="set-h">What happens next</p><div class="card u-vs"><div class="u-row"><span>Steps added</span><b>${r.next.steps}</b></div><div class="u-row"><span>Steps sent to Nudge!</span><b>${r.next.nudge}</b></div><div class="u-row"><span>What I found, edited</span><b>${r.next.found}</b></div></div>
+      ${sect('Essentials · most days', 'essential')}${sect('Sometimes', 'sometimes')}${sect('Barely or never', 'barely')}
+      ${extra ? `<p class="hint">${h(extra)}</p>` : ''}
+      <button type="button" class="btn" data-act="u:copy" style="margin-top:16px">Copy for Claude</button>
+      <button type="button" class="vc-sbtn u-mail" data-act="u:mail">Email to Innova Space</button>
+      <p class="hint">All testers also arrives by email every Sunday morning.${s.shareUsage ? '' : ' Your own counts are only shared when Share which features I use is on (Sync and sign-in).'}</p>`;
+  }
+
   if (page === 'look') {
     const pal = s.custom ? customPalette(s.custom.accent, s.custom.paper) : null;
     const warn = s.custom && pal ? [contrast(pal['--ink'], s.custom.paper) < 4.5 ? 'text may be hard to read' : '', contrast(s.custom.accent, s.custom.paper) < 1.6 ? 'the accent is close to the background' : ''].filter(Boolean) : [];
@@ -98,7 +143,8 @@ export async function renderSettings(view: HTMLElement, nav: Nav, to?: Page): Pr
     const last = c.lastSync ? new Date(c.lastSync).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : 'Not yet';
     body = c.signedIn
       ? `${grp('', [`<div class="srow"><span class="sbody"><span class="stitle">Signed in</span><span class="ssub">Last synced ${last}</span></span></div>`, act('sync', 'Sync now'), act('pk-add', 'Add a passkey on this device', 'For a phone or laptop outside your iCloud Keychain'), act('out', 'Sign out', 'Your thoughts stay on this device', true)])}
-        ${c.error ? `<p class="hint" role="status">${h(c.error)}</p>` : ''}<p class="hint">Changes sync on their own while Noggin? is open, and when you come back to it.</p>`
+        ${c.error ? `<p class="hint" role="status">${h(c.error)}</p>` : ''}<p class="hint">Changes sync on their own while Noggin? is open, and when you come back to it.</p>
+        ${grp('Beta', [tog('shareUsage', 'Share which features I use', !!s.shareUsage, 'Counts only, never your thoughts')])}<p class="hint">Helps decide what stays in the next version. Sent now and then while you’re signed in.</p>`
       : `<section class="card hero"><div class="serif hero-t">Your thoughts on every device</div>
           <p class="hint" style="margin:0">Sign in with a passkey: Face ID, Touch ID or your device’s lock. No password, no email. One passkey for every Innova Space app, Nudge! too.</p>
           ${passkeysWork() ? '<button type="button" class="btn" data-act="pk-new">Create a passkey</button><button type="button" class="btn-secondary" data-act="pk-in">I already have one · Sign in</button>' : '<p class="hint" style="margin:0">This browser can’t use passkeys. Try Safari or Chrome.</p>'}</section>
@@ -124,7 +170,12 @@ export async function renderSettings(view: HTMLElement, nav: Nav, to?: Page): Pr
     ${grp('', [`<div class="srow"><span class="sbody"><span class="stitle">Version</span></span><span class="sval">${VERSION}</span></div>`, `<div class="srow"><span class="sbody"><span class="stitle">Made by</span></span><span class="sval">Innova Space</span></div>`, `<a class="srow" href="https://innovaspace.app" target="_blank" rel="noopener"><span class="sbody"><span class="stitle">innovaspace.app</span></span><span class="chev">${ICON.chev}</span></a>`])}
     <p class="hint" style="text-align:center">© 2026 Innova Space. All rights reserved.</p>`;
 
-  if (page === 'news') body = `<section class="card news"><p class="serif" style="font-size:22px;margin:0 0 6px">1.1 · Nov 2026</p><ul>
+  if (page === 'news') body = `<section class="card news"><p class="serif" style="font-size:22px;margin:0 0 6px">1.2 · Nov 2026</p><ul>
+    <li>Say it (Labs beta, in Settings › Preview tools): say a few thoughts in any language, even mixed, and check them before they’re saved</li>
+    <li>A new welcome card, Just say it, and a small hand that shows where to tap</li><li>A new app icon that stays clear on dark Home Screens</li>
+    <li>Swipe down to close any sheet; Noggin? moves to a new version on its own when you tap a tab or come back</li>
+    <li>Usage report (beta, opt-in): counts only, never your thoughts</li></ul></section>
+    <section class="card news"><p class="serif" style="font-size:22px;margin:0 0 6px">1.1 · Nov 2026</p><ul>
     <li>AI helpers (optional): a first step for a Curiosity, a short answer for a Wondering</li><li>Hold a thought to move it, select, archive or delete</li>
     <li>A short welcome on Curiosities and Wonderings, and How Noggin? works in Settings</li><li>Long steps wrap; categories no longer double up after syncing</li></ul></section>
     <section class="card news"><p class="serif" style="font-size:22px;margin:0 0 6px">1.0 · Nov 2026</p><ul>
@@ -147,6 +198,7 @@ export async function renderSettings(view: HTMLElement, nav: Nav, to?: Page): Pr
   view.querySelectorAll<HTMLInputElement>('[data-color]').forEach((x) => x.addEventListener('change', async () => { await apply({ custom: { ...(await getSettings()).custom!, [x.dataset.color!]: x.value } }); redo(); }));
   view.querySelectorAll<HTMLInputElement>('[data-sw]').forEach((x) => x.addEventListener('change', async () => {
     const k = x.dataset.sw!;
+    if (k === 'shareUsage') { await updateSettings({ shareUsage: x.checked, usageAsked: true }); if (x.checked) void sendUsage(true); return; }
     if (k === 'custom') { await apply({ custom: x.checked ? { accent: '#d8b46a', paper: getComputedStyle(document.documentElement).getPropertyValue('--paper').trim() || '#0b0a09' } : undefined }); return redo(); }
     await apply({ [k]: x.checked } as Partial<Settings>);
   }));
@@ -170,6 +222,8 @@ export async function renderSettings(view: HTMLElement, nav: Nav, to?: Page): Pr
   view.onclick = async (e) => {
     const t = e.target as HTMLElement;
     if (t.closest('[data-back]')) return nav.back();
+    const ub = t.closest<HTMLElement>('[data-u], [data-us]');
+    if (ub) { if (ub.dataset.u) uWho = ub.dataset.u as 'me' | 'all'; if (ub.dataset.us) uSpan = +ub.dataset.us; return redo(); }
     const pg = t.closest<HTMLElement>('[data-page]');
     if (pg) { page = pg.dataset.page as Page; history.pushState({ view: 'settings', sp: page }, ''); window.scrollTo(0, 0); return redo(); }
     const g = t.closest<HTMLElement>('[data-goto]');
@@ -186,6 +240,10 @@ export async function renderSettings(view: HTMLElement, nav: Nav, to?: Page): Pr
     if (!a) return;
     if (a === 'feedback') return openFeedback();
     if (a === 'replay') return replayIntro();
+    if (a === 'u:copy') { try { await navigator.clipboard.writeText(lastReport); toast('Copied. Paste it to Claude.'); } catch { toast('Couldn’t copy here. Select the text in an email instead.'); } return; }
+    if (a === 'u:mail') { try { const r = await call<{ ok: boolean }>('/usage/mail', { text: lastReport, who: uWho === 'all' ? 'all testers' : ((await getSettings()).name || 'one tester') }); toast(r.ok ? 'Sent to Innova Space.' : 'Couldn’t send just now. Copy for Claude still works.'); } catch (err) { toast(`${friendlyError(err)} Nothing was sent.`); } return; }
+    if (a === 'u:id') { const id = view.querySelector('[data-uid]')?.textContent ?? ''; try { await navigator.clipboard.writeText(id); toast('ID copied'); } catch { toast(id); } return; }
+    if (a === 'replaysetup') { await updateSettings({ onboarded: false }); return location.reload(); }
     if (a === 'a2hs') return void openSheet(`<div class="sheet-head"><h2 class="serif">Add to Home Screen</h2></div>${homeScreenSteps()}`);
     if (a === 'backup') { await downloadBackup(); toast('Backup saved to your downloads'); return redo(); }
     if (a === 'restore') return file?.click();
@@ -205,6 +263,7 @@ export async function renderSettings(view: HTMLElement, nav: Nav, to?: Page): Pr
 }
 
 /** Each Settings page is its own history entry, so swipe back and the back button return one page at a time. */
+let uWho: 'me' | 'all' = 'me', uSpan = 14, lastReport = '';
 export function setSettingsPage(p?: string): void { page = (p as Page) || 'main'; }
 
 async function deleteCategory(id: string, after: () => void): Promise<void> {

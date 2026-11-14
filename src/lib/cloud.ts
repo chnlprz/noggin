@@ -13,7 +13,7 @@ export const cloud = {
   set(p: Partial<State>) { const s = { ...cloud.get(), ...p }; try { localStorage.setItem(KEY, JSON.stringify(s)); } catch { /* storage full: sync retries */ } return s; },
 };
 
-async function call<T = any>(path: string, body?: unknown): Promise<T> {
+export async function call<T = any>(path: string, body?: unknown): Promise<T> {
   const res = await fetch(`/api${path}`, { method: body === undefined ? 'GET' : 'POST', credentials: 'same-origin', headers: body === undefined ? {} : { 'content-type': 'application/json' }, body: body === undefined ? undefined : JSON.stringify(body) });
   const data = await res.json().catch(() => ({}));
   if (res.status === 401) { cloud.set({ signedIn: false }); throw Object.assign(new Error('signed-out'), { code: 401 }); }

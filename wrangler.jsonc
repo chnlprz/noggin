@@ -19,6 +19,10 @@
     { "binding": "DB", "database_name": "nudge", "database_id": "2a303c20-837b-41ca-a7d1-c759772d1aa4" }
   ],
   // Feedback copies go to the Innova Space inbox (a verified destination in Email Routing for innovaspace.app).
+  // Workers AI (Whisper) for Say it, Labs beta. Free daily allowance is shared across the Cloudflare account (Nudge! uses it too).
+  "ai": { "binding": "AI" },
   "send_email": [{ "name": "FEEDBACK_MAIL", "destination_address": "hello.innovaspace@gmail.com" }],
+  // Sundays 01:00 UTC = 9 AM Manila: weekly usage email (beta)
+  "triggers": { "crons": ["0 1 * * 0"] },
   "vars": { "RP_ID": "innovaspace.app", "FEEDBACK_FROM": "noggin@innovaspace.app", "FEEDBACK_TO": "hello.innovaspace@gmail.com" }
 }

@@ -1,4 +1,5 @@
 // App shell (Bible › Screens and navigation): greeting top bar, Curiosities · + · Wonderings, lists, search, archives, menu.
+import { seen, sendUsage, track } from '../lib/usage';
 import { db, getSettings, updateSettings } from '../db/db';
 import type { Category, Mode, Thought, ThoughtType } from '../db/types';
 import { applyLook } from '../lib/look';
@@ -12,7 +13,7 @@ import { downloadBackup } from '../db/backup';
 import { dismissStillCurious, stillCurious } from '../logic/resurface';
 import { currentNotice, hideNotice, homeScreenSteps } from '../logic/notices';
 import { renderDetail } from './detail';
-import { h, ICON, openSheet, toast } from './kit';
+import { h, hideToast, ICON, openSheet, toast } from './kit';
 
 type View = 'list' | 'detail' | 'search' | 'archives' | 'analytics' | 'settings';
 type Sort = 'newest' | 'oldest' | 'category' | 'revisited';
@@ -71,6 +72,7 @@ export function startShell(root: HTMLElement): void {
 }
 
 function go(view: View, id = ''): void {
+  if (view !== 'detail' && view !== 'list') hideToast(); // an Undo from the list doesn't follow you into Settings, Search…
   if (view === 'detail' && wide()) { S.id = id; void render(); return; } // desktop: details open in the right pane
   if (view !== 'detail') { S.left = view; if (wide()) S.id = ''; }
   if (view === 'settings') setSettingsPage('main');
@@ -120,6 +122,7 @@ async function draw(): Promise<void> {
   if (S.view === 'detail') return detailInto(view, back);
   if (S.view === 'search') return renderSearch(view);
   if (S.view === 'archives') return renderArchives(view);
+  if (S.view === 'analytics') seen('view.analytics');
   if (S.view === 'analytics') return renderAnalytics(view, { back, open: (id) => go('detail', id) });
   if (S.view === 'settings') return renderSettings(view, settingsNav(false));
   return renderList(view);
@@ -175,6 +178,7 @@ async function renderWide(view: HTMLElement): Promise<void> {
 
 // ── Lists ──
 async function renderList(view: HTMLElement): Promise<void> {
+  seen(S.tab === 'curiosity' ? 'view.curiosities' : 'view.wonderings');
   const rise = firstPaint; firstPaint = false;
   const s = await getSettings();
   const meta = await db.meta.get('meta');
@@ -251,14 +255,15 @@ async function renderList(view: HTMLElement): Promise<void> {
     if (t.closest('[data-clearcat]')) { S.cat = ''; return renderList(view); }
     const nb = t.closest<HTMLElement>('[data-notice]');
     if (nb?.dataset.notice === 'update') return applyUpdate();
+    if (nb?.dataset.notice === 'usage') { await updateSettings({ usageAsked: true, shareUsage: true }); void sendUsage(true); toast('Thank you. Turn it off any time in Settings › Sync and sign-in.'); return void render(); }
     if (nb?.dataset.notice === 'backup') { await downloadBackup(); toast('Backup saved to your downloads'); return void render(); }
     if (nb?.dataset.notice === 'a2hs') return void openSheet(`<div class="sheet-head"><h2 class="serif">Add to Home Screen</h2></div>${homeScreenSteps()}`);
     const hb = t.closest<HTMLElement>('[data-hide]');
-    if (hb) { await hideNotice(hb.dataset.hide as 'a2hs' | 'backup'); return void render(); }
+    if (hb) { await hideNotice(hb.dataset.hide as 'usage' | 'a2hs' | 'backup'); return void render(); }
     const scb = t.closest<HTMLElement>('[data-sc]');
     if (scb) {
       const id = scb.dataset.id!, act = scb.dataset.sc;
-      if (act === 'open') { await dismissStillCurious(); return go('detail', id); }
+      if (act === 'open') { track('still.open'); await dismissStillCurious(); return go('detail', id); }
       if (act === 'later') { await dismissStillCurious(14, id); return void render(); }
       await dismissStillCurious(); await archive([id]); void render();
       return toast('Archived', async () => { await unarchive([id]); void render(); });
@@ -309,6 +314,7 @@ function swipeRows(root: HTMLElement): void {
 
 /** Long-press (or right-click) a thought: move it to the other list, select, archive or delete. */
 function thoughtMenu(id: string, row?: HTMLElement | null): void {
+  track('hold');
   S.swiped = '';
   row?.classList.add('held');
   const text = row?.querySelector('.row-text')?.textContent?.trim() ?? '';
@@ -327,13 +333,14 @@ function thoughtMenu(id: string, row?: HTMLElement | null): void {
     if (!act) return;
     sheet.close();
     if (act === 'move') {
+      track('move');
       await updateThought(id, { type: other });
       if (S.id === id) S.id = '';
       void render();
       return toast(`Moved to ${otherName}`, async () => { await updateThought(id, { type: S.tab }); void render(); });
     }
-    if (act === 'select') { S.selecting = true; S.picked = new Set([id]); return void render(); }
-    if (act === 'archive') { await archive([id]); if (S.id === id) S.id = ''; void render(); return toast('Archived', async () => { await unarchive([id]); void render(); }); }
+    if (act === 'select') { track('select'); S.selecting = true; S.picked = new Set([id]); return void render(); }
+    if (act === 'archive') { track('archive'); await archive([id]); if (S.id === id) S.id = ''; void render(); return toast('Archived', async () => { await unarchive([id]); void render(); }); }
     await softDelete([id]); if (S.id === id) S.id = ''; void render();
     toast('Thought deleted', async () => { await restore([id]); void render(); });
   });
@@ -372,6 +379,7 @@ function openSort(cats: Category[]): void {
 
 // ── Search ──
 async function renderSearch(view: HTMLElement): Promise<void> {
+  seen('view.search');
   view.innerHTML = `
     <div class="search-top"><span class="muted">${ICON.search}</span><input class="search-in" id="q" placeholder="Search your thoughts" value="${h(S.q)}" aria-label="Search" autocomplete="off" enterkeyhint="search"><button class="link" data-cancel>Cancel</button></div>
     <div id="results"></div>`;
@@ -398,6 +406,7 @@ async function renderSearch(view: HTMLElement): Promise<void> {
 
 // ── Archives ──
 async function renderArchives(view: HTMLElement): Promise<void> {
+  seen('view.archives');
   const items = (await listThoughts({ type: S.archTab, archived: true })).sort((a, b) => (b.archivedAt ?? '').localeCompare(a.archivedAt ?? ''));
   view.innerHTML = `
     <div class="sub-top"><button class="back" data-back>${ICON.back}<span>Archives</span></button></div>

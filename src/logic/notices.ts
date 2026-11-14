@@ -1,15 +1,18 @@
 // Home notices (Bible › States): one at a time, highest first. 1 new version ready · 2 add to Home Screen.
 // The backup reminder joins in Phase 5.
-import { db } from '../db/db';
+import { db, getSettings, updateSettings } from '../db/db';
+import { cloud } from '../lib/cloud';
 import { isInstalled, isIOS } from '../lib/storage';
 
-export type Notice = { id: 'update' | 'a2hs' | 'backup'; text: string; action?: string };
+export type Notice = { id: 'update' | 'usage' | 'a2hs' | 'backup'; text: string; action?: string };
 
 const DAY = 864e5;
 const isPhone = () => /iphone|ipad|ipod|android/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 
 export async function currentNotice(): Promise<Notice | null> {
   if (sessionStorage.getItem('noggin-update-ready')) return { id: 'update', text: 'A new Noggin? is ready.', action: 'Reload' };
+  // Beta: once, after sign-in, ask to share which features get used (counts only)
+  if (cloud.get().signedIn && !(await getSettings()).usageAsked) return { id: 'usage', text: '<b>Help shape Noggin?</b> Share which features you use. Counts only, never your thoughts.', action: 'Share' };
   if (isPhone() && !isInstalled()) {
     const meta = await db.meta.get('meta');
     const hidden = meta?.a2hsHiddenAt ? Date.now() - Date.parse(meta.a2hsHiddenAt) : Infinity;
@@ -26,6 +29,7 @@ export async function currentNotice(): Promise<Notice | null> {
 }
 
 export async function hideNotice(id: Notice['id']): Promise<void> {
+  if (id === 'usage') await updateSettings({ usageAsked: true });
   if (id === 'a2hs') await db.meta.update('meta', { a2hsHiddenAt: new Date().toISOString() });
   if (id === 'backup') await db.meta.update('meta', { backupHiddenAt: new Date().toISOString() });
 }

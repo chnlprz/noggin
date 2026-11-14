@@ -1,4 +1,5 @@
 // Thought details (Bible › Thoughts): type, text, note, category, steps with Nudge! states, Send, Archive, Delete.
+import { seen, track } from '../lib/usage';
 import { db } from '../db/db';
 import type { Step, StepState } from '../db/types';
 import { addStep, archive, categories, editStep, markOpened, removeStep, reorderSteps, softDelete, stepsOf, unarchive, restore, updateThought } from '../logic/thoughts';
@@ -20,7 +21,7 @@ const STATE: Record<StepState, { text: string; cls: string } | null> = {
 const editable = (s: Step) => s.state === 'draft' || s.state === 'removed';
 
 export async function renderDetail(view: HTMLElement, id: string, nav: { back: () => void; refresh: () => void }, opened = true): Promise<void> {
-  if (opened) await markOpened(id);
+  if (opened) { await markOpened(id); track('view.thought'); }
   const t = await db.thoughts.get(id);
   if (!t || t.deletedAt) { nav.back(); return; }
   const [cats, steps] = await Promise.all([categories(), stepsOf(id)]);
@@ -55,13 +56,13 @@ export async function renderDetail(view: HTMLElement, id: string, nav: { back: (
   fit();
   text.addEventListener('input', () => { fit(); void updateThought(id, { text: text.value }); });
   text.addEventListener('change', async () => { if (!text.value.trim()) { text.value = t.text; await updateThought(id, { text: t.text }); } if (matchMedia('(min-width: 768px)').matches) nav.refresh(); });
-  note.addEventListener('input', () => { autogrow(note); void updateThought(id, { note: note.value || undefined }); });
+  note.addEventListener('input', () => { seen('note.edit'); autogrow(note); void updateThought(id, { note: note.value || undefined }); });
 
   view.querySelector('#dAdd')!.addEventListener('submit', async (e) => {
     e.preventDefault();
     const inp = view.querySelector<HTMLInputElement>('#dNew')!;
     if (!inp.value.trim()) return inp.focus();
-    await addStep(id, inp.value);
+    await addStep(id, inp.value); track('step.add');
     await renderDetail(view, id, nav, false);
     view.querySelector<HTMLInputElement>('#dNew')?.focus();
   });
@@ -79,7 +80,7 @@ export async function renderDetail(view: HTMLElement, id: string, nav: { back: (
   const ask = async (opts: Parameters<typeof askAI>[1] = {}) => {
     if (busy) return; busy = true;
     box.innerHTML = aiCard(t.type === 'curiosity' ? (steps.length ? 'A next step' : 'A first step') : 'Short answer', '<div class="ai-dots" aria-label="Thinking"><i></i><i></i><i></i></div>');
-    try { t.ai = await askAI(t, opts); paint(); }
+    try { t.ai = await askAI(t, opts); track(t.type === 'curiosity' ? 'ai.step' : 'ai.answer'); paint(); }
     catch (err) { box.innerHTML = aiCard('', `<p class="ai-p">${(err as Error).message === 'ai-off' ? 'AI helpers aren’t switched on for Noggin? yet.' : 'Couldn’t reach it just now. Your thought is unchanged.'}</p>`, '<button class="link" data-ai="retry">Try again</button>'); }
     busy = false;
   };
@@ -97,13 +98,13 @@ export async function renderDetail(view: HTMLElement, id: string, nav: { back: (
       if (a === 'another') return ask({ another: true, steps: steps.map((x) => x.text) });
       if (a === 'next') return ask({ steps: steps.map((x) => x.text) });
       if (a === 'more') { const m = view.querySelector<HTMLInputElement>('#aiMore')!; if (!m.value.trim()) return m.focus(); return ask({ more: m.value.trim() }); }
-      if (a === 'add' && t.ai) { await addStep(id, t.ai.text); await updateThought(id, { ai: { ...t.ai, tried: [...(t.ai.tried ?? []), t.ai.text] , text: '' } }); toast('Added to your steps'); return renderDetail(view, id, nav, false); }
+      if (a === 'add' && t.ai) { track('ai.step.add'); await addStep(id, t.ai.text); await updateThought(id, { ai: { ...t.ai, tried: [...(t.ai.tried ?? []), t.ai.text] , text: '' } }); toast('Added to your steps'); return renderDetail(view, id, nav, false); }
       if (a === 'save' && t.ai) {
         const add = t.ai.kind === 'personal' ? [...(t.ai.points ?? []).map((p) => `• ${p}`), t.ai.question ?? ''].filter(Boolean).join('\n') : t.ai.text;
         const n = [t.note?.trim(), add].filter(Boolean).join('\n\n');
         t.ai = { ...t.ai, saved: true }; t.note = n;
         await updateThought(id, { note: n, ai: t.ai }); note.value = n; autogrow(note); paint();
-        return toast('Saved to What I found');
+        track('ai.save'); return toast('Saved to What I found');
       }
       if (a === 'move') { await updateThought(id, { type: 'curiosity', ai: undefined }); toast('Moved to Curiosities'); return renderDetail(view, id, nav, false); }
       if (a === 'signin') { location.hash = ''; return void document.dispatchEvent(new CustomEvent('noggin:settings', { detail: 'sync' })); }
@@ -121,7 +122,7 @@ export async function renderDetail(view: HTMLElement, id: string, nav: { back: (
       const ds = (await stepsOf(id)).filter((s) => s.state === 'draft' && s.text.trim());
       if (!ds.length) return;
       if (!cloud.get().signedIn) { await copySteps(ds); toast(`Copied ${ds.length} step${ds.length > 1 ? 's' : ''} into Nudge!’s Batch add`); return renderDetail(view, id, nav, false); }
-      const r = await sendSteps(t, ds);
+      const r = await sendSteps(t, ds); track('handoff.send', ds.length);
       toast(r === 'sent' ? `${ds.length} step${ds.length > 1 ? 's' : ''} sent to Nudge!` : 'Saved here. They’ll go to Nudge! when you’re back online.', undefined, 3500);
       return renderDetail(view, id, nav, false);
     }

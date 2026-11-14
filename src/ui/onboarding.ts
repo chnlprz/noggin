@@ -107,7 +107,13 @@ function playRising(app: HTMLElement, done: () => void): void {
 const A = (d: number, cls: string, html: string, st = '') => `<div class="${cls}" style="--d:${d}s;${st}">${html}</div>`;
 const NCHIP = '<span class="ix-nchip">Nudge!</span>';
 const AIC = (label: string, body: string) => `<section class="card ai-card ix-ai"><div class="label">${label}</div>${body}</section>`;
-const CARDS: { body: string; btn: string; sub?: string }[] = [
+const SAY_MIC = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>';
+const SAY_WORDS = 'Draft the Q1 content plan for work. Tapos, bakit ang bagal ng checkout page natin? And maybe learn Figma auto layout, una watch the basics, then redo one screen.';
+const SAY_CARDS = [['Draft the Q1 content plan', 'Curiosity', 'Work', ''], ['Bakit ang bagal ng checkout page natin?', 'Wondering', '', ''], ['Learn Figma auto layout', 'Curiosity', '', '2 steps']];
+const HAND = '<span class="ring"></span><svg viewBox="0 0 24 24"><path d="M9 11V5.5a1.5 1.5 0 0 1 3 0V10m0-.5a1.5 1.5 0 0 1 3 0V11m0-.5a1.5 1.5 0 0 1 3 0V15a6 6 0 0 1-6 6h-.6a6 6 0 0 1-4.7-2.3L4.4 15.6a1.5 1.5 0 0 1 2.3-1.9L9 16V11" fill="#fff" stroke="#1f1a1c" stroke-width="1.4" stroke-linejoin="round" stroke-linecap="round"/></svg>';
+/** How long each card's demo runs before it waits (ms); then 2.5 s of nothing shows the hand. */
+const DEMO_MS = [8200, 4600, 7600, 4200];
+const CARDS: { body: string; btn: string; sub?: string; say?: boolean }[] = [
   { btn: 'Next', body: `<h1 class="serif ix-h">Two kinds of thoughts</h1>
     <div class="ix-stage">
       ${A(.2, 'card ix-kind a', `<div class="ix-kh"><span class="serif">Curiosity</span> <span class="muted">· something to do</span></div>
@@ -125,6 +131,10 @@ const CARDS: { body: string; btn: string; sub?: string }[] = [
       <div class="l2" style="--d:3.6s"><div class="ix-row inl" style="--d:3.8s"><p>Learn to make sourdough</p><span>Life</span></div><div class="ix-row"><p>Why do cats purr?</p><span>Learning</span></div></div>
       <div class="mn" style="--d:1.5s;--d2:2.8s"><div class="ix-mi pick" style="--d:2.3s">Move to Wonderings</div><div class="ix-mi muted">Select · Archive · Delete</div></div>
     </div>` },
+  { btn: 'Next', say: true, body: `<h1 class="serif ix-h">Just say it</h1><p class="muted ix-p">Say or type a few thoughts in any language, even mixed. Noggin? sorts each one.</p>
+    <div class="say listening" aria-label="Example: a few thoughts said out loud become sorted thoughts"><div class="say-said"><span class="say-mic" aria-hidden="true">${SAY_MIC}</span><span>${SAY_WORDS.split(' ').map((w) => `<w>${w} </w>`).join('')}</span></div>
+    <div class="say-cards">${SAY_CARDS.map(([t, ty, c, x]) => `<div class="say-card"><div class="t">${t}</div><div class="vc-tags"><span class="vc-tag">${ty}</span><span class="vc-tag${c ? '' : ' none'}">${c || 'No category'}</span>${x ? `<span class="vc-tag static">${x}</span>` : ''}</div></div>`).join('')}</div></div>
+    <p class="hint" style="margin:10px 0 0">Plain thoughts stay uncategorized. Name one (for work, sa bahay) and it’s filed there. You check every one before it’s saved.</p>` },
   { btn: 'Turn on AI helpers', sub: 'Not now', body: `<h1 class="serif ix-h">A little help,<br>if you want it</h1><p class="muted ix-p">A first step for a Curiosity, a short answer for a Wondering.</p>
     <div class="ix-stage ix-ai-stage">
       <div class="serif ix-t">Start a balcony garden</div>
@@ -137,7 +147,34 @@ const CARDS: { body: string; btn: string; sub?: string }[] = [
 /** The three intro cards. `replay` (from Settings › How Noggin? works) leaves the AI setting alone. */
 export function renderIntro(app: HTMLElement, done: () => void, replay = false): void {
   let i = 0;
+  let timers: number[] = [];
+  const later = (fn: () => void, ms: number) => { timers.push(window.setTimeout(fn, ms)); };
+  const clear = () => { timers.forEach(clearTimeout); timers = []; app.querySelector('.ob-hand')?.remove(); };
+  const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  /** Just say it: words appear as if spoken, then sorted cards drop in. Loops; reduced motion shows the end. */
+  const sayLoop = () => {
+    const say = app.querySelector<HTMLElement>('.say'); if (!say) return;
+    const ws = [...say.querySelectorAll('w')], cs = [...say.querySelectorAll('.say-card')];
+    ws.forEach((w) => w.classList.remove('on')); cs.forEach((c) => c.classList.remove('on')); say.classList.add('listening');
+    if (reduce) { ws.forEach((w) => w.classList.add('on')); cs.forEach((c) => c.classList.add('on')); say.classList.remove('listening'); return; }
+    ws.forEach((w, k) => later(() => w.classList.add('on'), 300 + k * 160));
+    const t = 300 + ws.length * 160 + 400;
+    later(() => say.classList.remove('listening'), t);
+    cs.forEach((c, k) => later(() => c.classList.add('on'), t + 300 + k * 450));
+    later(sayLoop, t + 300 + cs.length * 450 + 4000);
+  };
+  /** After the demo, 2.5 s of nothing: a small hand presses where to tap, until you do. */
+  const idleHand = () => {
+    app.querySelector('.ob-hand')?.remove();
+    later(() => {
+      const btn = app.querySelector<HTMLElement>('[data-next]'); if (!btn) return;
+      const hand = document.createElement('span'); hand.className = 'ob-hand'; hand.setAttribute('aria-hidden', 'true'); hand.innerHTML = HAND;
+      hand.style.left = `${btn.offsetLeft + btn.offsetWidth * 0.62}px`; hand.style.top = `${btn.offsetTop + btn.offsetHeight * 0.35}px`;
+      btn.parentElement!.appendChild(hand); requestAnimationFrame(() => hand.classList.add('on'));
+    }, 2500);
+  };
   const draw = () => {
+    clear();
     const c = CARDS[i];
     const last = i === CARDS.length - 1;
     app.innerHTML = `<main class="screen intro">
@@ -149,20 +186,22 @@ export function renderIntro(app: HTMLElement, done: () => void, replay = false):
     </main>`;
     const anim = app.querySelector<HTMLElement>('.ix-anim')!;
     requestAnimationFrame(() => anim.classList.add('go'));
+    if (c.say) sayLoop();
+    later(idleHand, reduce ? 0 : DEMO_MS[i]);
   };
   const next = async (turnOn?: boolean) => {
     if (i < CARDS.length - 1) { i++; return draw(); }
     if (turnOn !== undefined && !replay) await updateSettings({ aiSteps: turnOn, aiAnswers: turnOn });
-    done();
+    clear(); done();
   };
   app.onclick = (e) => {
     const t = e.target as HTMLElement;
-    if (t.closest('[data-skip]')) { app.onclick = null; return done(); }
+    if (t.closest('[data-skip]')) { clear(); app.onclick = null; return done(); }
     if (t.closest('[data-next]')) return void next(i === CARDS.length - 1 ? true : undefined);
     if (t.closest('[data-not]')) return void next(false);
   };
   let x0 = 0;
-  app.onpointerdown = (e) => { x0 = e.clientX; };
+  app.onpointerdown = (e) => { x0 = e.clientX; if (app.querySelector('.ob-hand')) { app.querySelector('.ob-hand')!.remove(); idleHand(); } };
   app.onpointerup = (e) => { const dx = e.clientX - x0; if (dx < -60 && i < CARDS.length - 1) { i++; draw(); } else if (dx > 60 && i > 0) { i--; draw(); } };
   draw();
 }

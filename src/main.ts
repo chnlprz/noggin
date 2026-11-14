@@ -1,13 +1,16 @@
 import './styles/tokens.css';
 import './styles/base.css';
 import './styles/app.css';
-import './lib/sw';
+import { afterUpdate } from './lib/sw';
+import { toast } from './ui/kit';
+import { VERSION } from './ui/settings';
 import { dedupeCategories, ensureSeeded, getSettings, purgeDeleted } from './db/db';
 import { applyLook, onSystemModeChange } from './lib/look';
 import { isInstalled, requestPersistence } from './lib/storage';
 import { renderWelcome } from './ui/onboarding';
 import { openThought, render, startShell } from './ui/shell';
 import { startAutoSync } from './lib/cloud';
+import { sendUsage } from './lib/usage';
 
 // No pinch zoom (text size lives in Settings).
 for (const ev of ['gesturestart', 'gesturechange']) document.addEventListener(ev, (e) => e.preventDefault(), { passive: false });
@@ -29,6 +32,10 @@ const app = document.getElementById('app')!;
   };
   // Rows from another device can bring the old duplicate categories: tidy them, then redraw.
   startAutoSync(() => { void dedupeCategories().then(redraw); });
+  // Beta usage counts: sent at most every 6 hours, only with Share on and signed in
+  if (afterUpdate()) setTimeout(() => toast(`You’re on the new Noggin? ${VERSION}.`), 400);
+  void sendUsage();
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') void sendUsage(); });
   // From Nudge!'s "Open in Noggin?" (#t-<thought id>)
   const deep = location.hash.match(/^#t-(.+)$/);
   if (deep) history.replaceState(null, '', location.pathname);
