@@ -8,7 +8,7 @@ Idea bank PWA by Innova Space: Curiosities (ideas) and Wonderings (questions); s
 - **Nudge! Bible v2.0** and repo chnlprz/nudge: shared stack, rules and the other side of the handoff.
 
 ## Stack
-Vite + TypeScript (no framework), Dexie over IndexedDB (`src/db`), vite-plugin-pwa, Cloudflare Worker (`worker/index.ts`: /api passkeys + sync) + static assets from `dist/` (`wrangler.jsonc`), custom domain noggin.innovaspace.app. D1 binding `DB` = Nudge!'s `nudge` database: shared accounts (users, credentials, sessions, challenges); Noggin? rows only in `noggin_rows` / `noggin_rev` (never Nudge!'s `rows`, which Nudge! syncs whole). Session cookie `noggin_s`. Workers AI binding `AI` (Whisper, Say it) and secret `ANTHROPIC_API_KEY` (Haiku 5.5: AI helpers, Say it). AI calls counted in `noggin_ai_use` (no limit in the beta). Usage report (beta): `noggin_usage`, `noggin_usage_state`, `noggin_meta`; var `OWNER_IDS` unlocks All testers; cron Sundays 01:00 UTC mails all testers. Handoff to Nudge! (Phase 7): shared `handoffs` table; Noggin? /api/handoff/send, /cancel, /list; Nudge! 2.9 /api/handoff/pending, /status; Nudge! task ids `nog-<handoffId>`.
+Vite + TypeScript (no framework), Dexie over IndexedDB (`src/db`), vite-plugin-pwa, Cloudflare Worker (`worker/index.ts`: /api passkeys + sync) + static assets from `dist/` (`wrangler.jsonc`), custom domain noggin.innovaspace.app. D1 binding `DB` = Nudge!'s `nudge` database: shared accounts (users, credentials, sessions, challenges); Noggin? rows only in `noggin_rows` / `noggin_rev` (never Nudge!'s `rows`, which Nudge! syncs whole). Session cookie `noggin_s`. Workers AI binding `AI` (Whisper, Say it) and secret `ANTHROPIC_API_KEY` (Haiku 5.5: AI helpers, Say it). AI calls counted in `noggin_ai_use` (no limit in the beta). Usage report (beta): `noggin_usage`, `noggin_usage_state`, `noggin_meta`; var `OWNER_IDS` (Chanel's account) unlocks All testers; cron Sundays 01:00 UTC mails all testers. Handoff to Nudge! (Phase 7): shared `handoffs` table; Noggin? /api/handoff/send, /cancel, /list; Nudge! 2.9 /api/handoff/pending, /status; Nudge! task ids `nog-<handoffId>`.
 
 ## Rules
 - Colours, sizes, radii only from `src/styles/tokens.css`. Serif via `var(--serif)`, never bold, `opsz 18`.
@@ -24,5 +24,4 @@ Vite + TypeScript (no framework), Dexie over IndexedDB (`src/db`), vite-plugin-p
 Settings › Preview tools: Labs › Say it switch (or make it standard), Replay the welcome and setup, Usage report; Sync › Beta › Share which features I use; the Home "Help shape Noggin?" notice.
 
 ## Open issues
-- `OWNER_IDS` not set yet: Chanel's account ID (shown in Usage report › All testers) goes in wrangler.jsonc vars.
 - Dark mode shows horizontal bands only in Chrome on Chanel's Intel Mac (not iPad, phone, or Nudge!). A fixed solid `html::before` layer was tried (Nov 12); not yet confirmed fixed.

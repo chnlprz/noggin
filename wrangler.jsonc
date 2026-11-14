@@ -24,5 +24,7 @@
   "send_email": [{ "name": "FEEDBACK_MAIL", "destination_address": "hello.innovaspace@gmail.com" }],
   // Sundays 01:00 UTC = 9 AM Manila: weekly usage email (beta)
   "triggers": { "crons": ["0 1 * * 0"] },
-  "vars": { "RP_ID": "innovaspace.app", "FEEDBACK_FROM": "noggin@innovaspace.app", "FEEDBACK_TO": "hello.innovaspace@gmail.com" }
+  "vars": { "RP_ID": "innovaspace.app", "FEEDBACK_FROM": "noggin@innovaspace.app", "FEEDBACK_TO": "hello.innovaspace@gmail.com",
+    // Accounts that see All testers in Settings › Preview tools › Usage report (beta)
+    "OWNER_IDS": "redjmWP77IUbuDVvCh8ItwtS" }
 }
