@@ -12,7 +12,7 @@ import { h, ICON, openSheet, toast } from './kit';
 import { replayIntro } from './onboarding';
 import { homeScreenSteps } from '../logic/notices';
 
-export const VERSION = '1.2.1';
+export const VERSION = '1.2.2';
 const SIZES = [0.9, 1, 1.12, 1.25];
 type Page = 'main' | 'you' | 'thoughts' | 'still' | 'nudge' | 'ai' | 'tips' | 'preview' | 'usage' | 'look' | 'sync' | 'data' | 'deleted' | 'about' | 'news';
 const TITLES: Record<Page, string> = { main: 'Settings', you: 'You', thoughts: 'Thoughts', still: 'Still curious?', nudge: 'Nudge!', ai: 'AI helpers', tips: 'How Noggin? works', preview: 'Preview tools', usage: 'Usage report', look: 'Theme, font and colours', sync: 'Sync and sign-in', data: 'Back up, import, reset', deleted: 'Recently deleted', about: 'About Noggin?', news: 'What’s new' };
